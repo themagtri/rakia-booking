@@ -9,7 +9,7 @@
  */
 
 const CONFIG = {
-  CLIENT_ID: 'PASTE_YOUR_CLIENT_ID.apps.googleusercontent.com',
+  CLIENT_ID: '534010978875-ruq19hl5k9tgfi2rc678gm4qrrnv7989.apps.googleusercontent.com',
   AVAILABILITY_URL: 'https://themagtri.github.io/rakia-booking/availability.json',
   SITE_URL: 'https://themagtri.github.io/rakia-booking/',
   CALENDAR_ID: 'primary',
