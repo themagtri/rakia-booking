@@ -10,8 +10,8 @@
 
 const CONFIG = {
   CLIENT_ID: 'PASTE_YOUR_CLIENT_ID.apps.googleusercontent.com',
-  AVAILABILITY_URL: 'https://USERNAME.github.io/REPO/availability.json',
-  SITE_URL: 'https://USERNAME.github.io/REPO/',
+  AVAILABILITY_URL: 'https://themagtri.github.io/rakia-booking/availability.json',
+  SITE_URL: 'https://themagtri.github.io/rakia-booking/',
   CALENDAR_ID: 'primary',
   TIMEZONE: 'Asia/Jerusalem',
   MEETING_TITLE: 'מפגש אימון אישי – תוכנית רקיע',

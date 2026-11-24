@@ -25,14 +25,14 @@
 ### שלב 1 – להעלות את האתר ל-GitHub
 1. להעלות את כל הקבצים לריפו ב-GitHub.
 2. בריפו: **Settings → Pages → Source: Deploy from a branch → main / (root) → Save**.
-3. אחרי דקה הכתובת תופיע שם, למשל `https://USERNAME.github.io/REPO/`. לשמור אותה בצד.
+3. אחרי דקה הכתובת תופיע שם, למשל `https://themagtri.github.io/rakia-booking/`. לשמור אותה בצד.
 
 ### שלב 2 – ליצור "מפתח התחברות עם Google"
 1. להיכנס ל-[console.cloud.google.com](https://console.cloud.google.com) ולבחור למעלה **New Project**.
 2. בתפריט: **APIs & Services → OAuth consent screen** → External → למלא שם אפליקציה ("תוכנית רקיע") ואימייל → לשמור. בסוף ללחוץ **Publish app**.
 3. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type: **Web application**
-   - Authorized JavaScript origins: `https://USERNAME.github.io`
+   - Authorized JavaScript origins: `https://themagtri.github.io`
 4. להעתיק את ה-**Client ID** (מסתיים ב-`apps.googleusercontent.com`).
 
 ### שלב 3 – להקים את השרת
