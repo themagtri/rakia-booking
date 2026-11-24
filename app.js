@@ -616,7 +616,7 @@
     };
     $("aAdd").onclick = addTime;
     timeInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); addTime(); } };
-    timeInput.oninput = () => updateConv(ds);
+    timeInput.oninput = timeInput.onchange = () => updateAdminPreview(ds);
     $("aSave").onclick = () => saveSlots(ds);
   }
 
@@ -638,9 +638,17 @@
     el.textContent = c.text ? "= " + c.text : "";
   }
 
+  /** השעות שנבחרו: הרשימה + שעה שמוזנת כרגע בשדה (גם בלי ללחוץ "הוספה") */
+  function currentTimes() {
+    const list = state.admin.times.slice();
+    const v = $("aTime") ? $("aTime").value : "";
+    if (/^\d{2}:\d{2}$/.test(v) && !list.includes(v)) list.push(v);
+    return list.sort();
+  }
+
   /** כל המועדים (בשעון ישראל) שייפתחו לפי ההגדרות */
   function plannedSlots(ds) {
-    const A = state.admin;
+    const A = { ...state.admin, times: currentTimes() };
     let dates = [ds];
     if (A.repeat === "weekly") {
       let end;
@@ -682,8 +690,8 @@
     const p = plannedSlots(ds);
     const el = $("aPreview");
     const save = $("aSave");
-    if (!A.times.length) {
-      el.innerHTML = '<p class="muted small">הוסיפו שעה אחת או יותר.</p>';
+    if (!currentTimes().length) {
+      el.innerHTML = '<p class="muted small">בחרו שעה בשדה "שעות" למעלה. כדי לפתוח כמה שעות באותו יום, לחצו "הוספה" אחרי כל שעה.</p>';
       save.disabled = true;
       return;
     }
@@ -693,7 +701,7 @@
       return;
     }
     const n = p.list.length;
-    let html = "<p><strong>" + (n ? "ייפתחו " + n + " מועדים" : "אין מועדים חדשים לפתוח") + "</strong>" +
+    let html = "<p><strong>" + (n === 1 ? "ייפתח מועד אחד" : n ? "ייפתחו " + n + " מועדים" : "אין מועדים חדשים לפתוח") + "</strong>" +
       (n ? " · " + (p.list[0][0] === p.list[n - 1][0] ? "ב-" + shortDate(p.list[0][0])
         : "מ-" + shortDate(p.list[0][0]) + " עד " + shortDate(p.list[n - 1][0])) : "") + "</p>";
     const notes = [];
@@ -706,7 +714,7 @@
     }
     el.innerHTML = html;
     save.disabled = !n;
-    save.textContent = n ? "פתיחת " + n + " מועדים" : "פתיחת המועדים";
+    save.textContent = n === 1 ? "פתיחת המועד" : n ? "פתיחת " + n + " מועדים" : "פתיחת המועדים";
   }
 
   async function saveSlots(ds) {
@@ -727,8 +735,8 @@
       if (res.ok) {
         state.slots = res.slots;
         state.admin.times = [];
-        renderCalendar(); renderAdminDay();
-        toast("נפתחו " + res.added + " מועדים");
+        renderCalendar(); renderAdminDay();   // מצייר מחדש, כך שגם שדה השעה מתאפס
+        toast(res.added === 1 ? "המועד נפתח" : "נפתחו " + res.added + " מועדים");
       } else {
         toast(errorText(res.error));
         save.disabled = false; save.textContent = "פתיחת המועדים";
