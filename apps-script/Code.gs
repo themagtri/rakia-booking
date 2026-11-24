@@ -733,4 +733,228 @@ function setup() {
   slotsSheet_();
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('reminderJob').timeBased().everyMinutes(15).create();
+  installReportTriggers_();   // דו"ח חודשי ב-1 לחודש + תפריט "דוחות"
+}
+
+/* ================= דו"ח חודשי לחברה (נוצר אוטומטית ב-1 לכל חודש) ================= */
+
+const REPORT = {
+  RATE: 180,                       // ₪ לשעה
+  PLATFORM: 'Google Meet',
+  BILL_UNIT: '1 שעה',
+  HOUR: 8                          // באיזו שעה (שעון ישראל) ב-1 לחודש הדו"ח נוצר
+};
+
+// סטטוסים בגיליון Bookings שנכנסים לדו"ח. אפשר לשנות ידנית בעמודת status:
+//   active = בוצעה · late = ביטול מאוחר (מחויב) · noshow = אי-הגעה (מחויב)
+// מפגש שבוטל (cancelled) לא נכנס לדו"ח. הערות: לכתוב בעמודה M (notes) בגיליון Bookings.
+const REPORT_STATUS_ = { active: 'בוצעה', late: 'ביטול מאוחר (מחויב)', noshow: 'אי-הגעה (מחויב)' };
+
+/** להריץ פעם אחת: יוצר את ההפקה החודשית ואת תפריט "דוחות" בגיליון */
+function setupReports() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => ['monthlyReport', 'onOpenReports'].indexOf(t.getHandlerFunction()) >= 0)
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  installReportTriggers_();
+  const sh = sheet_();
+  if (!sh.getRange(1, 13).getValue()) sh.getRange(1, 13).setValue('notes');
+}
+
+function installReportTriggers_() {
+  ScriptApp.newTrigger('monthlyReport').timeBased().onMonthDay(1).atHour(REPORT.HOUR)
+    .inTimezone(CONFIG.TIMEZONE).create();
+  ScriptApp.newTrigger('onOpenReports').forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet()).onOpen().create();
+}
+
+function onOpenReports() {
+  SpreadsheetApp.getUi().createMenu('דוחות')
+    .addItem('הפקת דו"ח לחודש הקודם', 'reportLastMonthNow')
+    .addItem('הפקת דו"ח לחודש מסוים...', 'reportForMonth')
+    .addToUi();
+}
+
+/** מופעל אוטומטית ב-1 לכל חודש */
+function monthlyReport() {
+  createMonthlyReport_(prevMonthKey_(), true);
+}
+
+function reportLastMonthNow() {
+  const r = createMonthlyReport_(prevMonthKey_(), true);
+  SpreadsheetApp.getUi().alert('הדו"ח נוצר ונשלח לאימייל שלך.\n\n' + r.url);
+}
+
+function reportForMonth() {
+  const ui = SpreadsheetApp.getUi();
+  const ans = ui.prompt('הפקת דו"ח', 'לאיזה חודש? למשל: 2026-11', ui.ButtonSet.OK_CANCEL);
+  if (ans.getSelectedButton() !== ui.Button.OK) return;
+  const mk = ans.getResponseText().trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mk)) { ui.alert('יש לכתוב שנה וחודש בפורמט 2026-11'); return; }
+  const r = createMonthlyReport_(mk, true);
+  ui.alert('הדו"ח נוצר ונשלח לאימייל שלך.\n\n' + r.url);
+}
+
+function prevMonthKey_() {
+  const p = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM').split('-').map(Number);
+  const y = p[1] === 1 ? p[0] - 1 : p[0];
+  const m = p[1] === 1 ? 12 : p[1] - 1;
+  return y + '-' + String(m).padStart(2, '0');
+}
+
+function fmtDMY_(ds) { return ds.split('-').reverse().join('/'); }
+
+function timePlain_(time, minutes) {
+  const t = time.split(':').map(Number);
+  const end = t[0] * 60 + t[1] + (minutes || 50);
+  const pad = n => String(n).padStart(2, '0');
+  return time + '–' + pad(Math.floor(end / 60) % 24) + ':' + pad(end % 60);
+}
+
+function shekels_(n) { return n.toLocaleString('en-US') + ' ₪'; }
+
+/** בונה את הדו"ח כקובץ Google Sheets חדש. מחזיר { url, count, total } */
+function createMonthlyReport_(mk, sendEmail) {
+  const y = Number(mk.slice(0, 4)), m = Number(mk.slice(5, 7));
+  const monthName = HEB_MONTHS_[m - 1] + ' ' + y;
+  const first = mk + '-01';
+  const last = mk + '-' + String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0');
+  const today = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'dd/MM/yyyy');
+
+  // הערות מעמודה M (notes) בגיליון Bookings, אם יש
+  const raw = sheet_().getDataRange().getValues();
+  const notesById = {};
+  for (let i = 1; i < raw.length; i++) if (raw[i][0]) notesById[raw[i][0]] = raw[i][12] ? String(raw[i][12]).trim() : '';
+
+  const rows = allBookings_()
+    .filter(b => b.date.slice(0, 7) === mk && REPORT_STATUS_[b.status])
+    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+
+  const missing = [];
+  const data = rows.map((b, i) => {
+    const name = String(b.name || '').trim();
+    if (!name) missing.push('שורה ' + (i + 1) + ': שם המשתתף');
+    if (!b.time) missing.push('שורה ' + (i + 1) + ': שעה');
+    return [
+      i + 1, fmtDMY_(b.date), b.time ? timePlain_(b.time, CONFIG.DURATION_MINUTES || 50) : '[להשלמה]',
+      name || '[להשלמה]', REPORT.PLATFORM, REPORT_STATUS_[b.status], REPORT.BILL_UNIT, REPORT.RATE,
+      notesById[b.id] || '—'
+    ];
+  });
+  const n = data.length;
+  const total = n * REPORT.RATE;
+
+  const message =
+    'שלום,\n\n' +
+    'מצורף דו"ח פגישות הייעוץ (1:1, Google Meet) לתקופה ' + fmtDMY_(first) + ' – ' + fmtDMY_(last) + '.\n' +
+    'סה"כ ' + n + ' פגישות / ' + n + ' שעות לחיוב, לפי תעריף של ' + REPORT.RATE + ' ₪ לשעה.\n' +
+    'סה"כ לתשלום: ' + shekels_(total) + '.\n\n' +
+    'אשמח לאישורכם לדו"ח, כדי שאוכל להפיק חשבונית/קבלה.\n\n' +
+    'תודה,\n' + CONFIG.OWNER_NAME;
+
+  // ----- יצירת הקובץ -----
+  const ss = SpreadsheetApp.create('דו"ח פגישות – תוכנית רקיע – ' + monthName);
+  const sh = ss.getSheets()[0];
+  sh.setName('דו"ח ' + monthName);
+  sh.setRightToLeft(true);
+  sh.getRange('A:I').setFontFamily('Arial').setFontSize(11).setVerticalAlignment('middle');
+
+  const ACCENT = '#5d7d6f', TINT = '#eef3f0', LINE = '#d9e2dc', SAND = '#f7f2e8';
+
+  // כותרת
+  sh.getRange('A1:I1').merge().setValue('דו"ח פגישות ייעוץ – תוכנית רקיע')
+    .setFontSize(18).setFontWeight('bold').setFontColor('#28322e');
+  sh.getRange('A2:I2').merge().setValue(CONFIG.OWNER_NAME + ' · ' + monthName).setFontColor(ACCENT);
+
+  // 1. בלוק סיכום
+  const firstRow = 12;
+  const amountRange = 'H' + firstRow + ':H' + (firstRow + Math.max(n, 1) - 1);
+  const summary = [
+    ['תקופת דיווח', fmtDMY_(first) + ' – ' + fmtDMY_(last)],
+    ['פלטפורמה', 'Google Meet (פגישות 1:1)'],
+    ['סה"כ פגישות / שעות לחיוב', n ? '=COUNT(' + amountRange + ')' : 0],
+    ['תעריף לשעה', REPORT.RATE],
+    ['סה"כ לתשלום', n ? '=SUM(' + amountRange + ')' : 0],
+    ['תאריך הפקת הדו"ח', today]
+  ];
+  sh.getRange('B4').setNumberFormat('@');
+  sh.getRange('B5').setNumberFormat('@');
+  sh.getRange('B9').setNumberFormat('@');
+  sh.getRange('B6').setNumberFormat('0 "שעות"');
+  sh.getRange('B7:B8').setNumberFormat('#,##0 "₪"');
+  sh.getRange(4, 1, 6, 2).setValues(summary);
+  for (let r = 4; r <= 9; r++) sh.getRange(r, 2, 1, 3).merge();
+  sh.getRange('A4:A9').setFontColor('#5f6b66').setBackground(TINT);
+  sh.getRange('B4:D9').setFontWeight('bold').setHorizontalAlignment('right').setBackground('#ffffff');
+  sh.getRange('B8:D8').setFontColor(ACCENT).setFontSize(13);
+  sh.getRange('A4:D9').setBorder(true, true, true, true, true, true, LINE, SpreadsheetApp.BorderStyle.SOLID);
+
+  // 2. טבלת פירוט
+  const head = ['#', 'תאריך', 'שעות', 'שם המשתתף / הלקוח', 'פלטפורמה', 'סטטוס', 'חיוב', 'סכום', 'הערות'];
+  sh.getRange(firstRow - 1, 1, 1, 9).setValues([head])
+    .setBackground(ACCENT).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+  let after;
+  if (n) {
+    const body = sh.getRange(firstRow, 1, n, 9);
+    sh.getRange(firstRow, 2, n, 2).setNumberFormat('@');            // תאריך ושעות כטקסט
+    sh.getRange(firstRow, 8, n, 1).setNumberFormat('#,##0 "₪"');
+    body.setValues(data);
+    body.setBorder(true, true, true, true, true, true, LINE, SpreadsheetApp.BorderStyle.SOLID);
+    sh.getRange(firstRow, 1, n, 3).setHorizontalAlignment('center');
+    sh.getRange(firstRow, 5, n, 4).setHorizontalAlignment('center');
+    for (let i = 1; i < n; i += 2) sh.getRange(firstRow + i, 1, 1, 9).setBackground('#fafbfa');
+    // שורת סה"כ
+    const tr = firstRow + n;
+    sh.getRange(tr, 7).setValue('סה"כ').setFontWeight('bold').setHorizontalAlignment('center');
+    sh.getRange(tr, 8).setFormula('=SUM(' + amountRange + ')').setNumberFormat('#,##0 "₪"')
+      .setFontWeight('bold').setHorizontalAlignment('center').setBackground(TINT);
+    after = tr + 2;
+  } else {
+    sh.getRange(firstRow, 1, 1, 9).merge().setValue('לא נמצאו פגישות לחיוב בתקופה זו.')
+      .setHorizontalAlignment('center').setFontColor('#8a928e');
+    after = firstRow + 2;
+  }
+
+  // 3. נוסח הודעה מוכן לשליחה
+  sh.getRange(after, 1, 1, 9).merge().setValue('נוסח הודעה לשליחה במייל / וואטסאפ (להעתקה)')
+    .setFontWeight('bold').setFontColor('#28322e');
+  sh.getRange(after + 1, 1, 1, 9).merge().setValue(message).setWrap(true).setVerticalAlignment('top')
+    .setBackground(SAND).setBorder(true, true, true, true, null, null, '#c9b98f', SpreadsheetApp.BorderStyle.SOLID);
+  sh.setRowHeight(after + 1, 190);
+
+  // נתונים חסרים
+  if (missing.length) {
+    sh.getRange(after + 3, 1, 1, 9).merge()
+      .setValue('לתשומת לבך – חסרים נתונים שסומנו [להשלמה]: ' + missing.join(' · '))
+      .setFontColor('#a65a4e').setWrap(true);
+  }
+
+  // רוחב עמודות
+  [44, 100, 110, 200, 120, 170, 70, 90, 260].forEach((w, i) => sh.setColumnWidth(i + 1, w));
+  sh.setRowHeight(1, 36);
+  SpreadsheetApp.flush();
+
+  const url = ss.getUrl();
+  if (sendEmail) sendReportEmail_(monthName, first, last, n, total, url, message, missing);
+  return { url: url, count: n, total: total };
+}
+
+function sendReportEmail_(monthName, first, last, n, total, url, message, missing) {
+  send_(ownerEmail_(), {
+    subject: 'דו"ח הפגישות של ' + monthName + ' מוכן · ' + n + ' שעות · ' + shekels_(total),
+    html: emailLayout_({
+      preheader: 'הדו"ח החודשי מוכן לשליחה לחברה.',
+      eyebrow: 'דו"ח חודשי',
+      title: 'דו"ח הפגישות של ' + monthName,
+      paragraphs: ['הדו"ח לחודש שעבר נוצר ב-Google Sheets ומוכן לשליחה לחברה.'],
+      details: [
+        ['תקופה', fmtDMY_(first) + ' – ' + fmtDMY_(last)],
+        ['שעות לחיוב', n + ' שעות'],
+        ['תעריף', REPORT.RATE + ' ₪ לשעה'],
+        ['סה"כ לתשלום', shekels_(total)]
+      ],
+      button: { href: url, text: 'פתיחת הדו"ח' },
+      note: { title: 'נוסח הודעה לשליחה (להעתקה)', html: esc_(message).replace(/\n/g, '<br>') },
+      small: missing.length ? ['חסרים נתונים שסומנו [להשלמה]: ' + esc_(missing.join(' · '))] : [],
+      signature: false
+    })
+  });
 }
