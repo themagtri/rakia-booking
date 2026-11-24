@@ -83,6 +83,15 @@ function doPost(e) {
         return json_(removeSlots_(body));
       case 'cancelBooking':
         return json_(ownerCancel_(body));
+      case 'report': {
+        // הפקת דו"ח חודשי מהאתר (רק לבעלים)
+        const auth = requireOwner_(body);
+        if (auth.error) return json_({ ok: false, error: auth.error });
+        const mk = String(body.month || '');
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mk)) return json_({ ok: false, error: 'bad_request' });
+        const r = createMonthlyReport_(mk, true);
+        return json_({ ok: true, url: r.url, count: r.count, total: r.total, excluded: r.excluded, message: r.message });
+      }
       default:
         return json_({ ok: false, error: 'bad_request' });
     }
@@ -802,6 +811,9 @@ function prevMonthKey_() {
 
 function fmtDMY_(ds) { return ds.split('-').reverse().join('/'); }
 
+/** "מ-01/11/2026 עד 30/11/2026" (מילים במקום מקף, כדי שהכיוון לא יתהפך בעברית) */
+function fmtRange_(a, b) { return 'מ-' + fmtDMY_(a) + ' עד ' + fmtDMY_(b); }
+
 function timePlain_(time, minutes) {
   const t = time.split(':').map(Number);
   const end = t[0] * 60 + t[1] + (minutes || 50);
@@ -867,7 +879,7 @@ function createMonthlyReport_(mk, sendEmail) {
 
   const message =
     'שלום,\n\n' +
-    'מצורף דו"ח פגישות הייעוץ (1:1, Google Meet) לתקופה ' + fmtDMY_(first) + ' – ' + fmtDMY_(last) + '.\n' +
+    'מצורף דו"ח פגישות הייעוץ (1:1, Google Meet) לתקופה ' + fmtRange_(first, last) + '.\n' +
     'סה"כ ' + n + ' פגישות / ' + n + ' שעות לחיוב, לפי תעריף של ' + REPORT.RATE + ' ₪ לשעה.\n' +
     'סה"כ לתשלום: ' + shekels_(total) + '.\n\n' +
     'אשמח לאישורכם לדו"ח, כדי שאוכל להפיק חשבונית/קבלה.\n\n' +
@@ -891,7 +903,7 @@ function createMonthlyReport_(mk, sendEmail) {
   const firstRow = 12;
   const amountRange = 'H' + firstRow + ':H' + (firstRow + Math.max(n, 1) - 1);
   const summary = [
-    ['תקופת דיווח', fmtDMY_(first) + ' – ' + fmtDMY_(last)],
+    ['תקופת דיווח', fmtRange_(first, last)],
     ['פלטפורמה', 'Google Meet (פגישות 1:1)'],
     ['סה"כ פגישות / שעות לחיוב', n ? '=COUNT(' + amountRange + ')' : 0],
     ['תעריף לשעה', REPORT.RATE],
@@ -962,7 +974,7 @@ function createMonthlyReport_(mk, sendEmail) {
 
   const url = ss.getUrl();
   if (sendEmail) sendReportEmail_(monthName, first, last, n, total, url, message, missing, excluded);
-  return { url: url, count: n, total: total, excluded: excluded };
+  return { url: url, count: n, total: total, excluded: excluded, message: message };
 }
 
 function sendReportEmail_(monthName, first, last, n, total, url, message, missing, excluded) {
@@ -977,7 +989,7 @@ function sendReportEmail_(monthName, first, last, n, total, url, message, missin
       title: 'דו"ח הפגישות של ' + monthName,
       paragraphs: ['הדו"ח לחודש שעבר נוצר ב-Google Sheets ומוכן לשליחה לחברה.'],
       details: [
-        ['תקופה', fmtDMY_(first) + ' – ' + fmtDMY_(last)],
+        ['תקופה', fmtRange_(first, last)],
         ['שעות לחיוב', n + ' שעות'],
         ['תעריף', REPORT.RATE + ' ₪ לשעה'],
         ['סה"כ לתשלום', shekels_(total)]

@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=202611241844">
-  <script src="config.js?v=202611241844"></script>
+  <link rel="stylesheet" href="style.css?v=202611241930">
+  <script src="config.js?v=202611241930"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -72,6 +72,15 @@
       <p class="muted center">בחרו יום מסומן בלוח כדי לראות את השעות הפנויות.</p>
     </section>
 
+    <section class="card owner-tools" id="ownerReport" hidden>
+      <h3>דו"ח חודשי לחברה</h3>
+      <p class="meta">נוצר אוטומטית ב-1 לכל חודש. כאן אפשר להפיק אותו בכל רגע, לכל חודש. נספרים רק מפגשים שכבר התקיימו ולא בוטלו.</p>
+      <div class="tools-row">
+        <input type="month" id="reportMonth" aria-label="חודש לדו&quot;ח">
+        <button type="button" class="btn primary" id="makeReport">הפקת דו"ח</button>
+      </div>
+    </section>
+
     <section class="card owner-tools" id="ownerTools" hidden>
       <h3>ניקוי מועדים</h3>
       <p class="meta">מוחק רק מועדים פנויים. מפגשים שכבר נקבעו נשארים כמו שהם.</p>
@@ -107,6 +116,6 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="app.js?v=202611241844"></script>
+  <script src="app.js?v=202611241930"></script>
 </body>
 </html>

@@ -188,7 +188,15 @@ dl.info dd { margin: 0; }
 dl.info a { color: var(--accent-dark); }
 .owner-tools h3 { margin: 0 0 4px; font-weight: 600; font-size: 16px; }
 .owner-tools .meta { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
-.tools-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.tools-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.tools-row input[type="month"] {
+  font: inherit; font-size: 16px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text);
+}
+pre.msg {
+  white-space: pre-wrap; font: inherit; font-size: 14px; line-height: 1.6; margin: 0 0 8px;
+  background: var(--sand); border-right: 3px solid #c9b98f; border-radius: 10px; padding: 12px 14px; max-height: 220px; overflow: auto;
+}
+.modal-box { max-height: 92vh; overflow: auto; }
 .btn.danger { color: var(--danger); border-color: #e3c9c3; }
 .btn.danger:disabled { opacity: .45; cursor: default; }
 .btn.danger:hover { background: #f8ecea; }
@@ -245,6 +253,7 @@ dl.info a { color: var(--accent-dark); }
 .preview p { margin: 0 0 4px; }
 .preview details { margin-top: 6px; font-size: 14px; }
 .preview ul { margin: 6px 0 0; padding: 0 18px 0 0; max-height: 220px; overflow: auto; }
+.btn { white-space: nowrap; }
 .btn.wide { width: 100%; }
 .btn:disabled.primary { background: #a9bbb2; border-color: #a9bbb2; }
 .day.selected, .day.selected:hover {

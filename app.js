@@ -497,7 +497,69 @@
     return out;
   }
 
+  /* ---------- דו"ח חודשי (רק לבעלים) ---------- */
+
+  function prevMonthStr() {
+    const t = todayStr();
+    let y = +t.slice(0, 4), m = +t.slice(5, 7) - 1;
+    if (m === 0) { m = 12; y--; }
+    return y + "-" + String(m).padStart(2, "0");
+  }
+
+  function renderReportBox() {
+    const box = $("ownerReport");
+    box.hidden = !state.isOwner;
+    if (!state.isOwner) return;
+    const inp = $("reportMonth");
+    if (!inp.value) inp.value = prevMonthStr();
+    inp.max = todayStr().slice(0, 7);
+    $("makeReport").onclick = () => makeReport(inp.value);
+  }
+
+  async function makeReport(mk) {
+    if (!/^\d{4}-\d{2}$/.test(mk) || state.busy) return;
+    const [y, m] = mk.split("-").map(Number);
+    const monthName = fmtMonth(y, m - 1);
+    const btn = $("makeReport");
+    state.busy = true;
+    btn.disabled = true; btn.textContent = "מפיקים דו\"ח... (עד חצי דקה)";
+    try {
+      let res;
+      if (DEMO) {
+        await new Promise((r) => setTimeout(r, 800));
+        res = { ok: true, url: "https://docs.google.com/spreadsheets/", count: 3, total: 540, excluded: ["06/11/2026 11:00 · לדוגמה (בוטל ביומן)"],
+          message: "שלום,\n\nמצורף דו\"ח פגישות הייעוץ (1:1, Google Meet) לתקופה מ-01/11/2026 עד 30/11/2026.\nסה\"כ 3 פגישות / 3 שעות לחיוב, לפי תעריף של 180 ₪ לשעה.\nסה\"כ לתשלום: 540 ₪.\n\nאשמח לאישורכם לדו\"ח, כדי שאוכל להפיק חשבונית/קבלה.\n\nתודה,\nלורן זילברשטין" };
+      } else {
+        res = await api({ action: "report", idToken: state.user.token, month: mk });
+      }
+      if (!res.ok) { toast(errorText(res.error)); return; }
+      const body =
+        '<dl class="info"><dt>חודש</dt><dd>' + monthName + "</dd>" +
+        "<dt>שעות לחיוב</dt><dd>" + res.count + "</dd>" +
+        "<dt>סה\"כ לתשלום</dt><dd>" + res.total.toLocaleString("en-US") + " ₪</dd></dl>" +
+        (res.excluded && res.excluded.length
+          ? '<p class="muted small" style="margin-top:12px">לא נכללו: ' + res.excluded.map(escapeHtml).join(" · ") + "</p>" : "") +
+        '<p class="label" style="margin:16px 0 6px">נוסח הודעה לשליחה לחברה</p>' +
+        '<pre class="msg" id="reportMsg">' + escapeHtml(res.message || "") + "</pre>" +
+        '<p class="muted small">הדו"ח נשלח גם לאימייל שלך.</p>';
+      modal('הדו"ח של ' + monthName + " מוכן", body, [
+        { label: "פתיחת הדו\"ח", primary: true, onClick: () => window.open(res.url, "_blank", "noopener") },
+        { label: "העתקת ההודעה", onClick: async (e) => {
+          try { await navigator.clipboard.writeText(res.message || ""); e.target.textContent = "הועתק ✓"; }
+          catch (err) { const r = document.createRange(); r.selectNodeContents($("reportMsg")); getSelection().removeAllRanges(); getSelection().addRange(r); }
+        } },
+        { label: "סגירה", onClick: closeModal }
+      ]);
+    } catch (e) {
+      toast("משהו השתבש בחיבור. נסו שוב.");
+    } finally {
+      state.busy = false;
+      btn.disabled = false; btn.textContent = "הפקת דו\"ח";
+    }
+  }
+
   function renderOwnerTools() {
+    renderReportBox();
     const box = $("ownerTools");
     box.hidden = !state.isOwner;
     if (!state.isOwner) return;
