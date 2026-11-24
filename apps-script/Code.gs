@@ -106,6 +106,7 @@ function book_(body) {
 
     // הרשמה ראשונה: חובה שם מלא וטלפון, ונשמרים בטבלת המשתתפים
     let person = participants_()[user.email];
+    const isNew = !person;
     if (!person) {
       const fullName = String(body.fullName || '').trim().replace(/\s+/g, ' ').slice(0, 80);
       const phone = String(body.phone || '').trim().slice(0, 30);
@@ -138,13 +139,16 @@ function book_(body) {
     ]);
     SpreadsheetApp.flush();
 
-    const b = { email: user.email, name: user.name, date: date, time: time, meetLink: meetLink };
+    const b = {
+      email: user.email, name: user.name, phone: person.phone, date: date, time: time,
+      meetLink: meetLink, duration: avail.durationMinutes || 50
+    };
     sendConfirmation_(b);
     if (CONFIG.NOTIFY_OWNER) {
-      MailApp.sendEmail(ownerEmail_(),
-        'הרשמה חדשה: ' + user.name + ' – ' + hebDate_(date) + ' ' + time,
-        user.name + ' (' + user.email + ', ' + person.phone + ') נרשם/ה למפגש ב' + hebDate_(date) + ' בשעה ' + time +
-        ' (שעון ישראל).\nMeet: ' + meetLink);
+      b.isNew = isNew;
+      b.eventLink = event.htmlLink || '';
+      b.sheetUrl = SpreadsheetApp.getActiveSpreadsheet().getUrl();
+      sendOwnerNotice_(b);
     }
     return { ok: true, booking: { date: date, time: time, meetLink: meetLink } };
   } finally {
@@ -255,60 +259,252 @@ function json_(obj) {
 
 /* ================= אימיילים ================= */
 
-function emailHtml_(title, lines, meetLink) {
-  const btn = meetLink
-    ? '<p style="margin:18px 0 6px"><a href="' + meetLink + '" style="background:#6e8f80;color:#fff;text-decoration:none;' +
-      'padding:10px 22px;border-radius:10px;display:inline-block">כניסה למפגש ב-Google Meet</a></p>' +
-      '<p style="margin:0;font-size:13px;color:#7d8681">' + meetLink + '</p>'
+const SENDER_NAME = 'לורן זילברשטין · תוכנית רקיע';
+
+const E_ = {
+  bg: '#f2efe9', card: '#ffffff', ink: '#28322e', soft: '#4a5651', muted: '#8a928e', line: '#ebe6dd',
+  accent: '#5d7d6f', accentDark: '#4b685b', tint: '#f1f5f2', sand: '#f7f2e8', sandLine: '#c9b98f',
+  font: "'Assistant','Segoe UI','Helvetica Neue',Arial,sans-serif"
+};
+
+const HEB_DAYS_ = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+const HEB_MONTHS_ = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+
+/** "יום חמישי, 3 בדצמבר 2026" */
+function hebDateLong_(date) {
+  const p = date.split('-').map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  return 'יום ' + HEB_DAYS_[d.getUTCDay()] + ', ' + p[2] + ' ב' + HEB_MONTHS_[p[1] - 1] + ' ' + p[0];
+}
+
+/** "3 בדצמבר" */
+function hebDateShort_(date) {
+  const p = date.split('-').map(Number);
+  return p[2] + ' ב' + HEB_MONTHS_[p[1] - 1];
+}
+
+/** "10:00–10:50" */
+function timeRange_(time, minutes) {
+  const t = time.split(':').map(Number);
+  const end = t[0] * 60 + t[1] + (minutes || 50);
+  const pad = n => String(n).padStart(2, '0');
+  return '<span dir="ltr">' + time + '–' + pad(Math.floor(end / 60) % 24) + ':' + pad(end % 60) + '</span>';
+}
+
+function esc_(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+function durationMin_() {
+  try { return availability_().durationMinutes || 50; } catch (err) { return 50; }
+}
+
+/**
+ * תבנית אחידה לכל האימיילים.
+ * o: { preheader, eyebrow, title, paragraphs[], details[[label, html]], button{href,text}, buttonNote, note{title,html}, small[], signature }
+ */
+function emailLayout_(o) {
+  const E = E_;
+  const para = h => '<p style="margin:0 0 14px;font-size:16px;line-height:1.75;color:' + E.soft + '">' + h + '</p>';
+
+  let details = '';
+  if (o.details && o.details.length) {
+    details = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 4px;background:' +
+      E.tint + ';border-radius:14px">' + '<tr><td style="padding:6px 22px">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' +
+      o.details.map((d, i) => {
+        const bt = i ? 'border-top:1px solid #dfe8e2;' : '';
+        return '<tr><td style="' + bt + 'padding:13px 0;width:96px;font-size:13px;color:' + E.muted +
+          ';vertical-align:top;letter-spacing:.3px">' + d[0] + '</td><td style="' + bt + 'padding:13px 0;font-size:16px;color:' +
+          E.ink + ';font-weight:600;line-height:1.5">' + d[1] + '</td></tr>';
+      }).join('') + '</table></td></tr></table>';
+  }
+
+  let button = '';
+  if (o.button) {
+    button = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 8px"><tr>' +
+      '<td bgcolor="' + E.accent + '" style="border-radius:12px">' +
+      '<a href="' + esc_(o.button.href) + '" style="display:inline-block;padding:14px 30px;font-family:' + E.font +
+      ';font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:12px">' + o.button.text + '</a>' +
+      '</td></tr></table>' +
+      (o.buttonNote ? '<p style="margin:0 0 6px;font-size:12px;color:' + E.muted + ';direction:ltr;text-align:right">' + o.buttonNote + '</p>' : '');
+  }
+
+  const note = o.note
+    ? '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0 0"><tr>' +
+      '<td style="background:' + E.sand + ';border-right:3px solid ' + E.sandLine + ';border-radius:10px;padding:16px 20px">' +
+      '<p style="margin:0 0 6px;font-size:14px;font-weight:700;color:' + E.ink + '">' + o.note.title + '</p>' +
+      '<p style="margin:0;font-size:14px;line-height:1.7;color:' + E.soft + '">' + o.note.html + '</p></td></tr></table>'
     : '';
-  return '<div dir="rtl" style="font-family:Arial,sans-serif;color:#2f3a36;background:#f5f3ee;padding:24px">' +
-    '<div style="max-width:480px;margin:auto;background:#fffdf9;border:1px solid #e7e3da;border-radius:14px;padding:24px">' +
-    '<p style="margin:0 0 4px;color:#567365">תוכנית רקיע</p>' +
-    '<h2 style="font-weight:normal;margin:0 0 14px">' + title + '</h2>' +
-    lines.map(l => '<p style="margin:0 0 10px;line-height:1.6">' + l + '</p>').join('') + btn +
-    '<p style="margin:20px 0 0;color:#7d8681">' + CONFIG.OWNER_NAME + '</p>' +
-    '</div></div>';
+
+  const small = (o.small || []).map(h =>
+    '<p style="margin:14px 0 0;font-size:13px;line-height:1.7;color:' + E.muted + '">' + h + '</p>').join('');
+
+  const signature = o.signature === false ? '' :
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:32px 0 0;border-top:1px solid ' +
+    E.line + '"><tr><td style="padding-top:22px">' +
+    '<p style="margin:0;font-size:15px;color:' + E.soft + '">בברכה,</p>' +
+    '<p style="margin:4px 0 0;font-size:18px;color:' + E.ink + ';font-weight:600">' + CONFIG.OWNER_NAME + '</p>' +
+    '<p style="margin:2px 0 0;font-size:13px;color:' + E.muted + ';letter-spacing:.4px">תוכנית רקיע · אימון אישי</p>' +
+    '</td></tr></table>';
+
+  return '<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">' +
+    '<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">' +
+    '</head><body style="margin:0;padding:0;background:' + E.bg + '">' +
+    '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' + esc_(o.preheader || '') + '</div>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" dir="rtl" style="background:' + E.bg + '">' +
+    '<tr><td align="center" style="padding:36px 14px">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;font-family:' + E.font + ';text-align:right">' +
+
+    // כותרת עליונה
+    '<tr><td align="center" style="padding:0 0 22px">' +
+    '<p style="margin:0;font-size:12px;letter-spacing:4px;color:' + E.accentDark + ';font-weight:700">תוכנית רקיע</p>' +
+    '<p style="margin:6px 0 0;font-size:13px;color:' + E.muted + ';letter-spacing:.5px">אימון אישי · ' + CONFIG.OWNER_NAME + '</p>' +
+    '</td></tr>' +
+
+    // כרטיס
+    '<tr><td style="background:' + E.card + ';border:1px solid ' + E.line + ';border-radius:20px;overflow:hidden">' +
+    '<div style="height:4px;background:' + E.accent + ';line-height:4px;font-size:0">&nbsp;</div>' +
+    '<div style="padding:36px 36px 34px">' +
+    (o.eyebrow ? '<p style="margin:0 0 10px;font-size:12px;letter-spacing:2px;color:' + E.accent + ';font-weight:700">' + o.eyebrow + '</p>' : '') +
+    '<h1 style="margin:0 0 18px;font-size:28px;line-height:1.3;font-weight:400;color:' + E.ink + '">' + o.title + '</h1>' +
+    (o.paragraphs || []).map(para).join('') + details + button + note + small + signature +
+    '</div></td></tr>' +
+
+    // תחתית
+    '<tr><td align="center" style="padding:22px 10px 0">' +
+    '<p style="margin:0;font-size:12px;line-height:1.7;color:' + E.muted + '">אימייל זה נשלח אוטומטית ממערכת ההרשמה של תוכנית רקיע.</p>' +
+    '</td></tr></table></td></tr></table></body></html>';
 }
 
-const WA_LINE_ = () => 'לשינוי או ביטול יש לכתוב לי בוואטסאפ כמה שיותר מוקדם, ולפחות 24 שעות לפני המפגש.';
-
-function sendConfirmation_(b) {
-  MailApp.sendEmail({
-    to: b.email,
-    subject: 'נרשמת למפגש – ' + hebDate_(b.date) + ' בשעה ' + b.time,
-    htmlBody: emailHtml_('המפגש נקבע', [
-      'שלום ' + b.name + ',',
-      'המפגש שלנו נקבע ל<strong>' + hebDate_(b.date) + '</strong> בשעה <strong>' + b.time + '</strong> (שעון ישראל).',
-      'המפגש נוסף ליומן Google שלך. תזכורת תישלח יום לפני ושוב שעתיים לפני.',
-      WA_LINE_()
-    ], b.meetLink)
-  });
+function meetingDetails_(b) {
+  return [
+    ['תאריך', hebDateLong_(b.date)],
+    ['שעה', timeRange_(b.time, b.duration) + ' <span style="font-weight:400;color:' + E_.muted + ';font-size:14px">· שעון ישראל</span>'],
+    ['משך', (b.duration || 50) + ' דקות'],
+    ['מיקום', 'מפגש מקוון ב-Google Meet']
+  ];
 }
 
-function sendReminder_(b, kind) {
-  const when = kind === '24' ? 'מחר' : 'בעוד שעתיים';
-  MailApp.sendEmail({
-    to: b.email,
-    subject: 'תזכורת: המפגש שלנו ' + when + ', בשעה ' + b.time,
-    htmlBody: emailHtml_('תזכורת למפגש', [
-      'שלום ' + b.name + ',',
-      'תזכורת קטנה: המפגש שלנו ' + when + ' – ' + hebDate_(b.date) + ' בשעה <strong>' + b.time + '</strong>.',
-      kind === '24' ? WA_LINE_() : 'מחכה לך!'
-    ], b.meetLink)
-  });
+const CHANGE_NOTE_ = {
+  title: 'שינוי או ביטול',
+  html: 'אי אפשר לבטל או לשנות מפגש דרך האתר. אם משהו משתנה, יש לכתוב לי בוואטסאפ כמה שיותר מוקדם, ' +
+    '<strong>ולפחות 24 שעות לפני המפגש</strong>. אחרי הביטול אפשר לבחור באתר מועד חדש.'
+};
+
+function meetButton_(b) {
+  return b.meetLink ? { href: b.meetLink, text: 'הצטרפות למפגש ב-Google Meet' } : null;
 }
 
-function sendCancellation_(b) {
-  MailApp.sendEmail({
-    to: b.email,
-    subject: 'המפגש בוטל – ' + hebDate_(b.date) + ' ' + b.time,
-    htmlBody: emailHtml_('המפגש בוטל', [
-      'שלום ' + b.name + ',',
-      'המפגש שנקבע ל' + hebDate_(b.date) + ' בשעה ' + b.time + ' בוטל.',
-      'אפשר לבחור מועד חדש כאן: <a href="' + CONFIG.SITE_URL + '">' + CONFIG.SITE_URL + '</a>'
-    ])
-  });
+/* ---------- בניית התוכן (פונקציות טהורות, אפשר לבדוק בתצוגה מקדימה) ---------- */
+
+function confirmationEmail_(b) {
+  return {
+    subject: 'אישור מפגש · ' + hebDateLong_(b.date) + ' · ' + b.time,
+    html: emailLayout_({
+      preheader: 'המפגש שלך נקבע ל' + hebDateLong_(b.date) + ' בשעה ' + b.time + '.',
+      eyebrow: 'אישור הרשמה',
+      title: 'המפגש שלך נקבע',
+      paragraphs: [
+        'שלום ' + esc_(b.name) + ',',
+        'תודה על ההרשמה למפגש אימון אישי במסגרת תוכנית רקיע. אלו פרטי המפגש:'
+      ],
+      details: meetingDetails_(b),
+      button: meetButton_(b),
+      buttonNote: b.meetLink ? esc_(b.meetLink) : '',
+      note: CHANGE_NOTE_,
+      small: [
+        'ההזמנה נשלחה גם ליומן Google שלך. אם היא מופיעה כ"הזמנה משולח לא מוכר", יש ללחוץ "כן" באישור ההשתתפות, והמפגש יתווסף ליומן.',
+        'תזכורת תישלח יום לפני המפגש, ושוב שעתיים לפניו.'
+      ]
+    })
+  };
 }
+
+function reminderEmail_(b, kind) {
+  const soon = kind === '2';
+  return {
+    subject: soon ? 'בעוד שעתיים: המפגש שלנו ב-' + b.time : 'תזכורת: נתראה מחר ב-' + b.time,
+    html: emailLayout_({
+      preheader: soon ? 'המפגש מתחיל היום בשעה ' + b.time + '.' : 'המפגש שלנו מחר, ' + hebDateLong_(b.date) + ', בשעה ' + b.time + '.',
+      eyebrow: 'תזכורת',
+      title: soon ? 'נתראה בעוד שעתיים' : 'נתראה מחר',
+      paragraphs: [
+        'שלום ' + esc_(b.name) + ',',
+        soon ? 'המפגש שלנו מתחיל בעוד כשעתיים. מומלץ להצטרף כמה דקות לפני, ממקום שקט ועם חיבור יציב לאינטרנט.'
+             : 'רק תזכורת קטנה לקראת המפגש שלנו מחר:'
+      ],
+      details: meetingDetails_(b),
+      button: meetButton_(b),
+      buttonNote: b.meetLink ? esc_(b.meetLink) : '',
+      note: soon ? null : CHANGE_NOTE_
+    })
+  };
+}
+
+function cancellationEmail_(b) {
+  return {
+    subject: 'המפגש ב-' + hebDateShort_(b.date) + ' בוטל',
+    html: emailLayout_({
+      preheader: 'המפגש שנקבע ל' + hebDateLong_(b.date) + ' בשעה ' + b.time + ' בוטל.',
+      eyebrow: 'עדכון',
+      title: 'המפגש בוטל',
+      paragraphs: [
+        'שלום ' + esc_(b.name) + ',',
+        'המפגש שנקבע ל<strong>' + hebDateLong_(b.date) + '</strong> בשעה <strong>' + b.time + '</strong> בוטל, והוסר מהיומן.',
+        'אפשר לבחור מועד חדש באתר ההרשמה:'
+      ],
+      button: { href: CONFIG.SITE_URL, text: 'בחירת מועד חדש' }
+    })
+  };
+}
+
+function ownerEmail_html_(b) {
+  const phoneDigits = String(b.phone || '').replace(/[^\d+]/g, '');
+  const link = (href, text) => '<a href="' + esc_(href) + '" style="color:' + E_.accentDark + ';text-decoration:none">' + text + '</a>';
+  const details = [
+    ['שם', esc_(b.name) + (b.isNew ? ' <span style="display:inline-block;margin-right:6px;padding:2px 10px;border-radius:20px;background:' +
+      E_.sand + ';color:#8a6d2e;font-size:12px;font-weight:600">נרשם/ה לראשונה</span>' : '')],
+    ['אימייל', link('mailto:' + b.email, esc_(b.email))],
+    ['טלפון', b.phone ? link('tel:' + phoneDigits, '<span dir="ltr">' + esc_(b.phone) + '</span>') : '—'],
+    ['תאריך', hebDateLong_(b.date)],
+    ['שעה', timeRange_(b.time, b.duration) + ' <span style="font-weight:400;color:' + E_.muted + ';font-size:14px">· שעון ישראל</span>']
+  ];
+  return {
+    subject: 'הרשמה חדשה · ' + b.name + ' · ' + hebDateShort_(b.date) + ', ' + b.time,
+    html: emailLayout_({
+      preheader: b.name + ' נרשם/ה למפגש ב' + hebDateLong_(b.date) + ' בשעה ' + b.time + '.',
+      eyebrow: 'הרשמה חדשה',
+      title: esc_(b.name),
+      paragraphs: ['נקבע מפגש חדש דרך אתר ההרשמה. האירוע כבר ביומן שלך, עם קישור ל-Google Meet.'],
+      details: details,
+      button: b.meetLink ? { href: b.meetLink, text: 'קישור ל-Meet' } : null,
+      small: [
+        (b.eventLink ? link(b.eventLink, 'פתיחת האירוע ביומן') + ' · ' : '') +
+        (b.sheetUrl ? link(b.sheetUrl, 'גיליון ההרשמות') : '')
+      ],
+      signature: false
+    })
+  };
+}
+
+/* ---------- שליחה ---------- */
+
+function send_(to, mail) {
+  MailApp.sendEmail({ to: to, subject: mail.subject, htmlBody: mail.html, name: SENDER_NAME });
+}
+
+function withDuration_(b) {
+  if (!b.duration) b.duration = durationMin_();
+  return b;
+}
+
+function sendConfirmation_(b) { send_(b.email, confirmationEmail_(withDuration_(b))); }
+function sendReminder_(b, kind) { send_(b.email, reminderEmail_(withDuration_(b), kind)); }
+function sendCancellation_(b) { send_(b.email, cancellationEmail_(withDuration_(b))); }
+function sendOwnerNotice_(b) { send_(ownerEmail_(), ownerEmail_html_(withDuration_(b))); }
 
 /* ================= ביטול (רק על ידך) ================= */
 
