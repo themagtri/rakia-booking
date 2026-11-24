@@ -824,17 +824,40 @@ function createMonthlyReport_(mk, sendEmail) {
   const notesById = {};
   for (let i = 1; i < raw.length; i++) if (raw[i][0]) notesById[raw[i][0]] = raw[i][12] ? String(raw[i][12]).trim() : '';
 
-  const rows = allBookings_()
+  // בדיקה רטרואקטיבית בזמן ההפקה: נספרים רק מפגשים שכבר הסתיימו ולא בוטלו
+  const now = Date.now();
+  const durMs = (CONFIG.DURATION_MINUTES || 50) * 60000;
+  const owner = ownerEmail_();
+  const excluded = [];
+  const rows = [];
+  allBookings_()
     .filter(b => b.date.slice(0, 7) === mk && REPORT_STATUS_[b.status])
-    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
+    .forEach(b => {
+      const label = fmtDMY_(b.date) + ' ' + b.time + ' · ' + (b.name || '');
+      // 1. רק מפגש ששעת הסיום שלו כבר עברה
+      if (!b.time || slotStart_(b.date, b.time).getTime() + durMs > now) { excluded.push(label + ' (עוד לא התקיים)'); return; }
+      // 2. "בוצעה" נבדק מול היומן עצמו. late / noshow מחויבים בכל מקרה ולא נבדקים
+      if (b.status === 'active') {
+        let ev = null;
+        try { ev = Calendar.Events.get(CONFIG.CALENDAR_ID, b.eventId); } catch (err) { ev = null; }
+        if (!ev || ev.status === 'cancelled') { excluded.push(label + ' (בוטל ביומן)'); return; }
+        const me = (ev.attendees || []).find(a => String(a.email).toLowerCase() === owner);
+        if (me && me.responseStatus === 'declined') { excluded.push(label + ' (סימנת "לא" ביומן)'); return; }
+        const guest = (ev.attendees || []).find(a => String(a.email).toLowerCase() === b.email);
+        if (guest && guest.responseStatus === 'declined' && !notesById[b.id]) {
+          notesById[b.id] = 'לבדיקה: המשתתף/ת השיב/ה "לא" בהזמנה ביומן';
+        }
+      }
+      rows.push(b);
+    });
 
   const missing = [];
   const data = rows.map((b, i) => {
     const name = String(b.name || '').trim();
     if (!name) missing.push('שורה ' + (i + 1) + ': שם המשתתף');
-    if (!b.time) missing.push('שורה ' + (i + 1) + ': שעה');
     return [
-      i + 1, fmtDMY_(b.date), b.time ? timePlain_(b.time, CONFIG.DURATION_MINUTES || 50) : '[להשלמה]',
+      i + 1, fmtDMY_(b.date), timePlain_(b.time, CONFIG.DURATION_MINUTES || 50),
       name || '[להשלמה]', REPORT.PLATFORM, REPORT_STATUS_[b.status], REPORT.BILL_UNIT, REPORT.RATE,
       notesById[b.id] || '—'
     ];
@@ -926,6 +949,11 @@ function createMonthlyReport_(mk, sendEmail) {
       .setValue('לתשומת לבך – חסרים נתונים שסומנו [להשלמה]: ' + missing.join(' · '))
       .setFontColor('#a65a4e').setWrap(true);
   }
+  if (excluded.length) {
+    sh.getRange(after + (missing.length ? 4 : 3), 1, 1, 9).merge()
+      .setValue('לא נכללו בדו"ח (נבדק מול היומן בזמן ההפקה): ' + excluded.join(' · '))
+      .setFontColor('#8a928e').setWrap(true);
+  }
 
   // רוחב עמודות
   [44, 100, 110, 200, 120, 170, 70, 90, 260].forEach((w, i) => sh.setColumnWidth(i + 1, w));
@@ -933,11 +961,14 @@ function createMonthlyReport_(mk, sendEmail) {
   SpreadsheetApp.flush();
 
   const url = ss.getUrl();
-  if (sendEmail) sendReportEmail_(monthName, first, last, n, total, url, message, missing);
-  return { url: url, count: n, total: total };
+  if (sendEmail) sendReportEmail_(monthName, first, last, n, total, url, message, missing, excluded);
+  return { url: url, count: n, total: total, excluded: excluded };
 }
 
-function sendReportEmail_(monthName, first, last, n, total, url, message, missing) {
+function sendReportEmail_(monthName, first, last, n, total, url, message, missing, excluded) {
+  const small = [];
+  if (excluded && excluded.length) small.push('לא נכללו בדו"ח: ' + esc_(excluded.join(' · ')));
+  if (missing.length) small.push('חסרים נתונים שסומנו [להשלמה]: ' + esc_(missing.join(' · ')));
   send_(ownerEmail_(), {
     subject: 'דו"ח הפגישות של ' + monthName + ' מוכן · ' + n + ' שעות · ' + shekels_(total),
     html: emailLayout_({
@@ -953,7 +984,7 @@ function sendReportEmail_(monthName, first, last, n, total, url, message, missin
       ],
       button: { href: url, text: 'פתיחת הדו"ח' },
       note: { title: 'נוסח הודעה לשליחה (להעתקה)', html: esc_(message).replace(/\n/g, '<br>') },
-      small: missing.length ? ['חסרים נתונים שסומנו [להשלמה]: ' + esc_(missing.join(' · '))] : [],
+      small: small,
       signature: false
     })
   });
