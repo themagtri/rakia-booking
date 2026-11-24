@@ -10,12 +10,12 @@
 
 const CONFIG = {
   CLIENT_ID: '534010978875-ruq19hl5k9tgfi2rc678gm4qrrnv7989.apps.googleusercontent.com',
-  AVAILABILITY_URL: 'https://themagtri.github.io/rakia-booking/availability.json',
   SITE_URL: 'https://themagtri.github.io/rakia-booking/',
   CALENDAR_ID: 'primary',
   TIMEZONE: 'Asia/Jerusalem',
   MEETING_TITLE: 'מפגש אימון אישי – תוכנית רקיע',
   OWNER_NAME: 'לורן זילברשטין',
+  DURATION_MINUTES: 50,       // אורך מפגש
   MIN_MINUTES_AHEAD: 60,      // עד כמה דקות לפני מועד עוד אפשר להירשם
   NOTIFY_OWNER: true          // אימייל אליך על כל הרשמה חדשה
 };
@@ -30,6 +30,10 @@ HEADERS.forEach((h, i) => (COL[h] = i + 1));
 const PEOPLE_SHEET = 'Participants';
 const PEOPLE_HEADERS = ['email', 'fullName', 'phone', 'googleName', 'createdAt'];
 
+// המועדים הפתוחים: נפתחים ונסגרים מהאתר במצב ניהול (שעון ישראל)
+const SLOTS_SHEET = 'Slots';
+const SLOTS_HEADERS = ['date', 'time', 'createdAt'];
+
 /* ================= Web App ================= */
 
 function doGet() {
@@ -42,8 +46,7 @@ function doPost(e) {
 
   try {
     switch (body.action) {
-      case 'taken':
-        return json_({ ok: true, taken: takenSlots_() });
+      case 'init':
       case 'mine': {
         const user = verify_(body.idToken);
         if (!user) return json_({ ok: false, error: 'auth' });
@@ -52,6 +55,9 @@ function doPost(e) {
         const me = people[user.email];
         const res = {
           ok: true,
+          duration: CONFIG.DURATION_MINUTES,
+          slots: futureSlots_(),
+          taken: takenSlots_(),
           profile: me ? { fullName: me.fullName, phone: me.phone } : null,
           bookings: active.filter(b => b.email === user.email)
             .map(b => ({ date: b.date, time: b.time, meetLink: b.meetLink }))
@@ -71,6 +77,10 @@ function doPost(e) {
       }
       case 'book':
         return json_(book_(body));
+      case 'addSlots':
+        return json_(addSlots_(body));
+      case 'removeSlots':
+        return json_(removeSlots_(body));
       default:
         return json_({ ok: false, error: 'bad_request' });
     }
@@ -94,7 +104,7 @@ function book_(body) {
   const start = slotStart_(date, time);
   const minutesAhead = (start.getTime() - Date.now()) / 60000;
   if (minutesAhead < CONFIG.MIN_MINUTES_AHEAD) return { ok: false, error: 'past' };
-  const end = new Date(start.getTime() + (avail.durationMinutes || 50) * 60000);
+  const end = new Date(start.getTime() + CONFIG.DURATION_MINUTES * 60000);
 
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -113,7 +123,7 @@ function book_(body) {
       if (fullName.split(' ').length < 2 || !/^[+\d][\d\s\-()]*$/.test(phone) || phone.replace(/\D/g, '').length < 9) {
         return { ok: false, error: 'profile' };
       }
-      peopleSheet_().appendRow([user.email, fullName, phone, user.name, new Date()]);
+      appendRow_(peopleSheet_(), [user.email, fullName, phone, user.name, new Date()], [0, 1, 2, 3]);
       person = { fullName: fullName, phone: phone };
     }
     user.name = person.fullName;   // מכאן והלאה משתמשים בשם המלא שנמסר
@@ -125,23 +135,27 @@ function book_(body) {
       description: 'מפגש שנקבע דרך אתר ההרשמה.\nלשינוי או ביטול: לכתוב לי בוואטסאפ, לפחות 24 שעות מראש.',
       start: { dateTime: start.toISOString(), timeZone: CONFIG.TIMEZONE },
       end: { dateTime: end.toISOString(), timeZone: CONFIG.TIMEZONE },
-      attendees: [{ email: user.email, displayName: user.name }],
+      attendees: [
+        { email: user.email, displayName: user.name },
+        // גם את/ה ברשימת המשתתפים, ממתין/ה לאישור ידני ("כן") ביומן
+        { email: ownerEmail_(), displayName: CONFIG.OWNER_NAME, responseStatus: 'needsAction' }
+      ],
       conferenceData: { createRequest: { requestId: id, conferenceSolutionKey: { type: 'hangoutsMeet' } } },
       reminders: { useDefault: true }
     }, CONFIG.CALENDAR_ID, { conferenceDataVersion: 1, sendUpdates: 'all' });
 
     const meetLink = event.hangoutLink || '';
-    sheet_().appendRow([
+    appendRow_(sheet_(), [
       id, new Date(), user.email, user.name, date, time, event.id, meetLink, 'active',
       minutesAhead <= 24 * 60 ? 'skip' : '',   // נרשם פחות מיום מראש – בלי תזכורת של 24 שעות
       minutesAhead <= 2 * 60 ? 'skip' : '',    // פחות משעתיים מראש – בלי תזכורת של שעתיים
       ''
-    ]);
+    ], [0, 2, 3, 4, 5, 6, 7, 8]);
     SpreadsheetApp.flush();
 
     const b = {
       email: user.email, name: user.name, phone: person.phone, date: date, time: time,
-      meetLink: meetLink, duration: avail.durationMinutes || 50
+      meetLink: meetLink, duration: CONFIG.DURATION_MINUTES
     };
     sendConfirmation_(b);
     if (CONFIG.NOTIFY_OWNER) {
@@ -204,7 +218,7 @@ function participants_() {
   const out = {};
   for (let i = 1; i < values.length; i++) {
     const email = String(values[i][0]).toLowerCase();
-    if (email) out[email] = { fullName: String(values[i][1]), phone: String(values[i][2]) };
+    if (email) out[email] = { fullName: String(values[i][1]), phone: String(values[i][2]).trim() };
   }
   return out;
 }
@@ -233,17 +247,133 @@ function takenSlots_() {
 }
 
 function availability_() {
-  const cache = CacheService.getScriptCache();
-  const hit = cache.get('avail');
-  if (hit) return JSON.parse(hit);
-  const res = UrlFetchApp.fetch(CONFIG.AVAILABILITY_URL + '?t=' + Date.now());
-  const data = JSON.parse(res.getContentText());
-  cache.put('avail', JSON.stringify(data), 120);
-  return data;
+  return { durationMinutes: CONFIG.DURATION_MINUTES, slots: readSlots_() };
 }
 
-function normDate_(v) { return v instanceof Date ? Utilities.formatDate(v, CONFIG.TIMEZONE, 'yyyy-MM-dd') : String(v); }
-function normTime_(v) { return v instanceof Date ? Utilities.formatDate(v, CONFIG.TIMEZONE, 'HH:mm') : String(v); }
+/* ---------- מועדים פתוחים (גיליון Slots) ---------- */
+
+function slotsSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(SLOTS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(SLOTS_SHEET);
+    sh.appendRow(SLOTS_HEADERS);
+    sh.setFrozenRows(1);
+    sh.getRange('A:B').setNumberFormat('@');
+  }
+  return sh;
+}
+
+/** { "YYYY-MM-DD": ["HH:mm", ...] } */
+function readSlots_() {
+  const values = slotsSheet_().getDataRange().getValues();
+  const out = {};
+  for (let i = 1; i < values.length; i++) {
+    const d = normDate_(values[i][0]), t = normTime_(values[i][1]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !/^\d{2}:\d{2}$/.test(t)) continue;
+    (out[d] = out[d] || []).push(t);
+  }
+  Object.keys(out).forEach(d => { out[d] = Array.from(new Set(out[d])).sort(); });
+  return out;
+}
+
+function futureSlots_() {
+  const today = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd');
+  const all = readSlots_(), out = {};
+  Object.keys(all).forEach(d => { if (d >= today) out[d] = all[d]; });
+  return out;
+}
+
+function requireOwner_(body) {
+  const user = verify_(body.idToken);
+  if (!user) return { error: 'auth' };
+  if (user.email !== ownerEmail_()) return { error: 'forbidden' };
+  return { user: user };
+}
+
+function cleanSlotList_(list) {
+  const out = [];
+  (Array.isArray(list) ? list : []).slice(0, 1000).forEach(x => {
+    const d = String((x || [])[0] || ''), t = String((x || [])[1] || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d) && /^([01]\d|2[0-3]):[0-5]\d$/.test(t)) out.push([d, t]);
+  });
+  return out;
+}
+
+/** פתיחת מועדים (רק לבעלים). slots: [["YYYY-MM-DD","HH:mm"], ...] בשעון ישראל */
+function addSlots_(body) {
+  const auth = requireOwner_(body);
+  if (auth.error) return { ok: false, error: auth.error };
+  const list = cleanSlotList_(body.slots);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const existing = readSlots_();
+    const now = Date.now();
+    const seen = {};
+    const rows = [];
+    let skipped = 0;
+    list.forEach(([d, t]) => {
+      const key = d + ' ' + t;
+      if (seen[key] || (existing[d] || []).includes(t) || slotStart_(d, t).getTime() <= now) { skipped++; return; }
+      seen[key] = true;
+      rows.push([d, t, new Date()]);
+    });
+    if (rows.length) {
+      const sh = slotsSheet_();
+      sh.getRange(sh.getLastRow() + 1, 1, rows.length, 3).setNumberFormats(rows.map(() => ['@', '@', 'General'])).setValues(rows);
+    }
+    return { ok: true, added: rows.length, skipped: skipped, slots: futureSlots_() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** סגירת מועדים פנויים (רק לבעלים). מועד שכבר נקבע בו מפגש לא נמחק. */
+function removeSlots_(body) {
+  const auth = requireOwner_(body);
+  if (auth.error) return { ok: false, error: auth.error };
+  const remove = {};
+  cleanSlotList_(body.slots).forEach(([d, t]) => (remove[d + ' ' + t] = true));
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const booked = {};
+    activeBookings_().forEach(b => (booked[b.date + ' ' + b.time] = true));
+    const sh = slotsSheet_();
+    const values = sh.getDataRange().getValues();
+    const keep = [];
+    let removed = 0, keptBooked = 0;
+    for (let i = 1; i < values.length; i++) {
+      const d = normDate_(values[i][0]), t = normTime_(values[i][1]);
+      const key = d + ' ' + t;
+      if (remove[key] && !booked[key]) { removed++; continue; }
+      if (remove[key]) keptBooked++;
+      keep.push([d, t, values[i][2]]);
+    }
+    if (values.length > 1) sh.getRange(2, 1, values.length - 1, 3).clearContent();
+    if (keep.length) {
+      sh.getRange(2, 1, keep.length, 3).setNumberFormats(keep.map(() => ['@', '@', 'General'])).setValues(keep);
+    }
+    return { ok: true, removed: removed, keptBooked: keptBooked, slots: futureSlots_() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Google Sheets לפעמים הופך טקסט כמו "2026-11-25" או "18:00" לערך תאריך/שעה.
+// קוראים אותו בחזרה לפי אזור הזמן של הגיליון עצמו, כדי לקבל בדיוק את מה שנכתב.
+let SHEET_TZ_ = null;
+function sheetTz_() { return SHEET_TZ_ || (SHEET_TZ_ = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone()); }
+function normDate_(v) { return v instanceof Date ? Utilities.formatDate(v, sheetTz_(), 'yyyy-MM-dd') : String(v).trim(); }
+function normTime_(v) { return v instanceof Date ? Utilities.formatDate(v, sheetTz_(), 'HH:mm') : String(v).trim(); }
+
+/** הוספת שורה, כשהעמודות שב-textCols נשמרות כטקסט בלבד (בלי המרה אוטומטית לתאריך/מספר) */
+function appendRow_(sh, row, textCols) {
+  const r = sh.getLastRow() + 1;
+  const fmts = row.map((_, i) => (textCols.indexOf(i) >= 0 ? '@' : 'General'));
+  sh.getRange(r, 1, 1, row.length).setNumberFormats([fmts]).setValues([row]);
+}
 function slotStart_(date, time) { return Utilities.parseDate(date + ' ' + time, CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm'); }
 
 function hebDate_(date) {
@@ -296,9 +426,7 @@ function esc_(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
-function durationMin_() {
-  try { return availability_().durationMinutes || 50; } catch (err) { return 50; }
-}
+function durationMin_() { return CONFIG.DURATION_MINUTES; }
 
 /**
  * תבנית אחידה לכל האימיילים.
@@ -478,7 +606,8 @@ function ownerEmail_html_(b) {
       preheader: b.name + ' נרשם/ה למפגש ב' + hebDateLong_(b.date) + ' בשעה ' + b.time + '.',
       eyebrow: 'הרשמה חדשה',
       title: esc_(b.name),
-      paragraphs: ['נקבע מפגש חדש דרך אתר ההרשמה. האירוע כבר ביומן שלך, עם קישור ל-Google Meet.'],
+      paragraphs: ['נקבע מפגש חדש דרך אתר ההרשמה. האירוע כבר ביומן שלך, עם קישור ל-Google Meet. ' +
+        'כדי לאשר את ההגעה שלך, יש ללחוץ "כן" באירוע ביומן.'],
       details: details,
       button: b.meetLink ? { href: b.meetLink, text: 'קישור ל-Meet' } : null,
       small: [
@@ -580,6 +709,7 @@ function onOpen() {
 function setup() {
   sheet_();
   peopleSheet_();
+  slotsSheet_();
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('reminderJob').timeBased().everyMinutes(15).create();
 }

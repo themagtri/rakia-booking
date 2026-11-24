@@ -125,7 +125,63 @@ button { font: inherit; color: inherit; cursor: pointer; }
   color: var(--text); background: var(--accent-soft); border-color: #d6e2db;
 }
 .day.available:hover { border-color: var(--accent); }
-.day.available .dot { position: absolute; bottom: 18%; }
+.day .marks { position: absolute; bottom: 16%; display: flex; gap: 3px; }
+.day.manage { color: var(--text); cursor: pointer; border-color: var(--line); }
+.day.manage:hover { border-color: var(--accent); }
+.dot.booked { background: #c9a35c; }
+.day.selected .dot.booked { background: #f3dfb4; }
+.owner-hint {
+  margin: -4px 0 14px; padding: 8px 12px; border-radius: 10px; font-size: 14px;
+  background: var(--sand); color: #7a6639; text-align: center;
+}
+
+/* admin: opening / closing slots */
+.admin h4 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.admin-sec { padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--line); }
+.admin .small { font-size: 14px; }
+.admin .label { margin: 14px 0 6px; font-size: 14px; color: var(--muted); }
+.slot-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.slot-list li {
+  display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line);
+}
+.slot-list .t { font-weight: 600; min-width: 48px; }
+.slot-list .tz { flex: 1; font-size: 13px; color: var(--muted); }
+.local-inline { color: var(--accent-dark); }
+.slot-list .x {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 3px 10px; font-size: 13px; color: var(--danger);
+}
+.slot-list .x:hover { border-color: var(--danger); }
+.booked-by { font-size: 13px; color: #8a6d2e; background: var(--sand); padding: 2px 10px; border-radius: 20px; }
+.seg { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; width: fit-content; max-width: 100%; }
+.seg button { border: none; background: var(--surface); padding: 8px 14px; font-size: 14px; }
+.seg button + button { border-right: 1px solid var(--line); }
+.seg button[aria-checked="true"] { background: var(--accent); color: #fff; }
+.time-add { display: flex; gap: 8px; }
+.time-add input, .admin select, .admin input[type="date"] {
+  font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text);
+}
+.admin input[type="date"] { margin-top: 8px; display: block; }
+.admin input[type="date"][hidden] { display: none; }
+.conv { margin: 6px 0 0; min-height: 1.2em; font-size: 14px; color: var(--accent-dark); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border-radius: 20px;
+  background: var(--accent-soft); border: 1px solid #d6e2db; font-size: 15px; font-weight: 600;
+}
+.chip small { font-weight: 400; color: var(--accent-dark); font-size: 12px; }
+.chip button { border: none; background: none; font-size: 16px; line-height: 1; color: var(--muted); padding: 0 4px; }
+.wd { display: flex; gap: 6px; flex-wrap: wrap; }
+.wd button {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 14px;
+}
+.wd button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.quick { display: flex; gap: 12px; margin-top: 6px; }
+.preview { margin: 16px 0 12px; padding: 12px 14px; background: var(--bg); border-radius: 10px; }
+.preview p { margin: 0 0 4px; }
+.preview details { margin-top: 6px; font-size: 14px; }
+.preview ul { margin: 6px 0 0; padding: 0 18px 0 0; max-height: 220px; overflow: auto; }
+.btn.wide { width: 100%; }
+.btn:disabled.primary { background: #a9bbb2; border-color: #a9bbb2; }
 .day.selected, .day.selected:hover {
   background: var(--accent); color: #fff; border-color: var(--accent);
 }

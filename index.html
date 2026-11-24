@@ -44,6 +44,7 @@
     </section>
 
     <section class="card cal" id="calCard" hidden>
+      <p class="owner-hint" id="ownerHint" hidden>מצב ניהול · לחצו על יום כדי לפתוח או לסגור בו מועדים</p>
       <div class="cal-head">
         <button class="nav" id="prevMonth" type="button" aria-label="החודש הקודם">›</button>
         <h2 id="monthTitle"></h2>
@@ -55,6 +56,7 @@
       <div class="grid" id="grid" role="grid"></div>
       <div class="legend">
         <span><i class="dot"></i> יש מועדים פנויים</span>
+        <span id="legendBooked" hidden><i class="dot booked"></i> נקבע מפגש</span>
       </div>
     </section>
 
