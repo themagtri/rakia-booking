@@ -256,18 +256,33 @@
     let html = "<h3>המפגשים הקרובים</h3>" +
       '<p class="meta">מצב ניהול: מופיע רק לך. ' +
       (same ? "אזור הזמן במחשב כרגע זהה לישראל." : "שעון מקומי לפי המחשב: " + escapeHtml(deviceZoneLabel())) + "</p>";
+    const SHOW = 3;
+    const list = state.showAllUpcoming ? state.all : state.all.slice(0, SHOW);
     if (!state.all.length) {
       html += '<p class="muted" style="margin:0">אין עדיין מפגשים קרובים.</p>';
     } else {
-      html += "<ul>" + state.all.map((b) =>
-        "<li><strong>" + escapeHtml(b.name) + "</strong> · " + escapeHtml(b.email) +
+      html += "<ul>" + list.map((b) =>
+        '<li class="upcoming" data-d="' + b.date + '" data-t="' + b.time + '" tabindex="0" role="button" title="פרטים וביטול">' +
+        "<strong>" + escapeHtml(b.name) + "</strong> · " + escapeHtml(b.email) +
         (b.phone ? ' · <a href="tel:' + escapeHtml(b.phone.replace(/[^\d+]/g, "")) + '" dir="ltr">' + escapeHtml(b.phone) + "</a>" : "") + "<br>" +
         fmtLongDate(b.date) + " · " + b.time + " שעון ישראל" +
         (same ? "" : ' · <span class="local">' + localTime(b.date, b.time) + " אצלך</span>") +
         (b.meetLink ? '<br><a href="' + escapeHtml(b.meetLink) + '" target="_blank" rel="noopener">קישור ל-Meet</a>' : "") +
         "</li>").join("") + "</ul>";
+      if (state.all.length > SHOW) {
+        html += '<button type="button" class="link small" id="toggleUpcoming">' +
+          (state.showAllUpcoming ? "הצגת פחות" : "הצגת כל " + state.all.length + " המפגשים") + "</button>";
+      }
     }
+    html = html.replace("<h3>המפגשים הקרובים</h3>", "<h3>המפגשים הקרובים" +
+      (state.all.length ? ' <span class="count">' + state.all.length + "</span>" : "") + "</h3>");
     box.innerHTML = html;
+    if ($("toggleUpcoming")) $("toggleUpcoming").onclick = () => { state.showAllUpcoming = !state.showAllUpcoming; renderOwner(); };
+    box.querySelectorAll("li.upcoming").forEach((li) => {
+      const open = (e) => { if (e.target.closest("a")) return; showBooking(li.dataset.d, li.dataset.t); };
+      li.onclick = open;
+      li.onkeydown = (e) => { if (e.key === "Enter") open(e); };
+    });
   }
 
   function renderMine() {
@@ -313,22 +328,116 @@
     const trail = 6 - new Date(Date.UTC(y, m, lastDay)).getUTCDay();  // השלמת השבוע האחרון
     const today = todayStr();
 
+    const MAX_CHIPS = window.innerWidth < 560 ? 2 : 4;
+
     for (let i = -lead; i < lastDay + trail; i++) {
       const ds = ymd(y, m, 1 + i);
       const inMonth = i >= 0 && i < lastDay;
       const avail = hasFree(ds);
-      const booked = state.isOwner && hasBooked(ds);
       const clickable = state.isOwner ? ds >= today : avail;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "day" + (inMonth ? "" : " other") + (ds === today ? " today" : "") +
-        (avail ? " available" : "") + (state.isOwner && clickable ? " manage" : "") + (ds === state.selected ? " selected" : "");
-      btn.disabled = !clickable;
-      btn.innerHTML = '<span class="num">' + +ds.slice(8) + "</span>" +
-        '<span class="marks">' + (avail ? '<i class="dot"></i>' : "") + (booked ? '<i class="dot booked"></i>' : "") + "</span>";
-      btn.setAttribute("aria-label", fmtLongDate(ds) + (avail ? " – יש מועדים פנויים" : ""));
-      if (clickable) btn.onclick = () => selectDay(ds);
-      grid.appendChild(btn);
+
+      // קוביות בתוך היום: פנוי (ירוק), ולבעלים גם מפגש שנקבע (זהוב, עם שם)
+      const chips = [];
+      freeTimes(ds).forEach((t) => {
+        const isTaken = state.taken.has(ds + " " + t);
+        if (!isTaken) chips.push({ t, kind: "free" });
+        else if (state.isOwner) chips.push({ t, kind: "booked", b: bookingAt(ds, t) });
+      });
+
+      const cell = document.createElement("div");
+      cell.className = "day" + (inMonth ? "" : " other") + (ds === today ? " today" : "") +
+        (avail ? " available" : "") + (clickable ? " clickable" : " disabled") + (ds === state.selected ? " selected" : "");
+      cell.setAttribute("role", "button");
+      cell.setAttribute("aria-disabled", String(!clickable));
+      cell.setAttribute("aria-label", fmtLongDate(ds) + (avail ? " – יש מועדים פנויים" : ""));
+      if (clickable) {
+        cell.tabIndex = 0;
+        cell.onclick = () => selectDay(ds);
+        cell.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectDay(ds); } };
+      }
+
+      let html = '<span class="num">' + +ds.slice(8) + '</span><span class="cchips">';
+      chips.slice(0, MAX_CHIPS).forEach((c) => {
+        if (c.kind === "free") {
+          html += '<button type="button" class="cchip free" data-t="' + c.t + '" tabindex="-1">' + c.t + "</button>";
+        } else {
+          const name = c.b ? escapeHtml(c.b.name.split(" ")[0]) : "";
+          html += '<button type="button" class="cchip booked" data-t="' + c.t + '" tabindex="-1" title="' +
+            (c.b ? escapeHtml(c.b.name) : "") + '">' + c.t + (name ? " <b>" + name + "</b>" : "") + "</button>";
+        }
+      });
+      if (chips.length > MAX_CHIPS) html += '<span class="more">+' + (chips.length - MAX_CHIPS) + "</span>";
+      html += "</span>";
+      cell.innerHTML = html;
+
+      // לחיצה על קובייה: נרשם → ישר לאישור; בעלים → פרטי המפגש / ניהול היום
+      cell.querySelectorAll(".cchip").forEach((chip) => {
+        chip.onclick = (e) => {
+          e.stopPropagation();
+          const t = chip.dataset.t;
+          if (chip.classList.contains("booked")) return showBooking(ds, t);
+          if (state.isOwner) return selectDay(ds);
+          state.selected = ds; renderCalendar(); renderSlots();
+          if (!bookedThisMonth(ds)) confirmBooking(ds, t);
+        };
+      });
+      grid.appendChild(cell);
+    }
+  }
+
+  /** פרטי מפגש שנקבע (רק לבעלים) */
+  function showBooking(ds, t) {
+    const b = bookingAt(ds, t);
+    const same = sameZoneAsIsrael();
+    let body = "<p><strong>" + fmtLongDate(ds) + "</strong> · " + t + " שעון ישראל" +
+      (same ? "" : '<br><span class="muted">' + localTime(ds, t) + " אצלך</span>") + "</p>";
+    if (b) {
+      body += '<dl class="info">' +
+        "<dt>שם</dt><dd>" + escapeHtml(b.name) + "</dd>" +
+        '<dt>אימייל</dt><dd><a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + "</a></dd>" +
+        (b.phone ? '<dt>טלפון</dt><dd><a dir="ltr" href="tel:' + escapeHtml(b.phone.replace(/[^\d+]/g, "")) + '">' + escapeHtml(b.phone) + "</a></dd>" : "") +
+        "</dl>";
+    }
+    const actions = [];
+    if (b && b.meetLink) actions.push({ label: "כניסה ל-Meet", primary: true, onClick: () => window.open(b.meetLink, "_blank", "noopener") });
+    actions.push({ label: "ביטול המפגש", danger: true, onClick: () => confirmCancel(ds, t, b) });
+    actions.push({ label: "סגירה", onClick: closeModal });
+    modal(b ? b.name : "מפגש שנקבע", body, actions);
+  }
+
+  function confirmCancel(ds, t, b) {
+    const who = b ? escapeHtml(b.name) : "המשתתף/ת";
+    modal("לבטל את המפגש?",
+      "<p>המפגש של <strong>" + who + "</strong> ב" + fmtLongDate(ds) + " בשעה " + t + " יבוטל.</p>" +
+      '<p class="muted">יישלח אימייל ביטול, האירוע יימחק מהיומנים, והמועד ייפתח מחדש להרשמה.</p>',
+      [
+        { label: "כן, לבטל את המפגש", danger: true, onClick: (e) => cancelMeeting(ds, t, e.target) },
+        { label: "חזרה", onClick: () => showBooking(ds, t) }
+      ]);
+  }
+
+  async function cancelMeeting(ds, t, btn) {
+    if (state.busy) return;
+    state.busy = true;
+    btn.disabled = true; btn.textContent = "מבטלים...";
+    try {
+      let res;
+      if (DEMO) {
+        state.all = state.all.filter((x) => !(x.date === ds && x.time === t));
+        state.taken.delete(ds + " " + t);
+        res = { ok: true };
+      } else {
+        res = await api({ action: "cancelBooking", idToken: state.user.token, date: ds, time: t });
+        if (res.ok) await loadInit();
+      }
+      closeModal();
+      if (res.ok) { renderAll(); toast("המפגש בוטל, ונשלח אימייל ביטול"); }
+      else toast(errorText(res.error));
+    } catch (e) {
+      closeModal();
+      toast("משהו השתבש בחיבור. נסו שוב.");
+    } finally {
+      state.busy = false;
     }
   }
 
@@ -405,7 +514,7 @@
         return '<li><span class="t">' + t + '</span><span class="tz">ישראל' +
           (same ? "" : ' · <span class="local-inline">' + localTime(ds, t) + " אצלך</span>") + "</span>" +
           (isTaken
-            ? '<span class="booked-by">נקבע' + (b ? ": " + escapeHtml(b.name) : "") + "</span>"
+            ? '<button type="button" class="booked-by" data-info="' + t + '">נקבע' + (b ? ": " + escapeHtml(b.name) : "") + " · פרטים</button>"
             : '<button type="button" class="x" data-del="' + t + '" aria-label="סגירת המועד ' + t + '">סגירה</button>') +
           "</li>";
       }).join("") + "</ul>";
@@ -458,6 +567,7 @@
     const box = $("slots");
 
     box.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => removeSlots([[ds, b.dataset.del]])));
+    box.querySelectorAll("[data-info]").forEach((b) => (b.onclick = () => showBooking(ds, b.dataset.info)));
     if ($("delDay")) $("delDay").onclick = () => {
       const free = freeTimes(ds).filter((t) => !state.taken.has(ds + " " + t));
       if (confirm("לסגור " + free.length + " מועדים פנויים ב" + fmtLongDate(ds) + "?")) removeSlots(free.map((t) => [ds, t]));
@@ -659,7 +769,7 @@
     wrap.innerHTML = "";
     actions.forEach((a) => {
       const b = document.createElement("button");
-      b.type = "button"; b.className = "btn" + (a.primary ? " primary" : ""); b.textContent = a.label;
+      b.type = "button"; b.className = "btn" + (a.primary ? " primary" : "") + (a.danger ? " danger" : ""); b.textContent = a.label;
       b.onclick = a.onClick;
       wrap.appendChild(b);
     });
@@ -789,6 +899,12 @@
     state.view = { y: +t.slice(0, 4), m: +t.slice(5, 7) - 1 };
     initGoogle();
     renderAll();
+    // מספר הקוביות בכל יום תלוי ברוחב המסך
+    let lastNarrow = window.innerWidth < 560;
+    window.addEventListener("resize", () => {
+      const narrow = window.innerWidth < 560;
+      if (narrow !== lastNarrow) { lastNarrow = narrow; renderCalendar(); }
+    });
   }
 
   init();

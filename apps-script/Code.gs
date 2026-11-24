@@ -81,6 +81,8 @@ function doPost(e) {
         return json_(addSlots_(body));
       case 'removeSlots':
         return json_(removeSlots_(body));
+      case 'cancelBooking':
+        return json_(ownerCancel_(body));
       default:
         return json_({ ok: false, error: 'bad_request' });
     }
@@ -218,7 +220,9 @@ function participants_() {
   const out = {};
   for (let i = 1; i < values.length; i++) {
     const email = String(values[i][0]).toLowerCase();
-    if (email) out[email] = { fullName: String(values[i][1]), phone: String(values[i][2]).trim() };
+    let phone = String(values[i][2]).trim();
+    if (/^5\d{8}$/.test(phone)) phone = '0' + phone;   // ה-0 שנעלם כש-Sheets שמר את המספר כמספר
+    if (email) out[email] = { fullName: String(values[i][1]), phone: phone };
   }
   return out;
 }
@@ -636,6 +640,23 @@ function sendCancellation_(b) { send_(b.email, cancellationEmail_(withDuration_(
 function sendOwnerNotice_(b) { send_(ownerEmail_(), ownerEmail_html_(withDuration_(b))); }
 
 /* ================= ביטול (רק על ידך) ================= */
+
+/** ביטול מפגש מהאתר (רק לבעלים). המועד נשאר פתוח, והנרשם/ת מקבל/ת אימייל ביטול. */
+function ownerCancel_(body) {
+  const auth = requireOwner_(body);
+  if (auth.error) return { ok: false, error: auth.error };
+  const date = String(body.date || ''), time = String(body.time || '');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const b = activeBookings_().find(x => x.date === date && x.time === time);
+    if (!b) return { ok: false, error: 'notfound' };
+    cancelBooking_(b, true);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 function cancelBooking_(b, notify) {
   try {

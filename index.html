@@ -46,17 +46,22 @@
     <section class="card cal" id="calCard" hidden>
       <p class="owner-hint" id="ownerHint" hidden>מצב ניהול · לחצו על יום כדי לפתוח או לסגור בו מועדים</p>
       <div class="cal-head">
-        <button class="nav" id="prevMonth" type="button" aria-label="החודש הקודם">›</button>
+        <!-- בעברית: החודש הקודם בצד ימין (חץ ימינה), החודש הבא בצד שמאל (חץ שמאלה) -->
+        <button class="nav" id="prevMonth" type="button" aria-label="החודש הקודם">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <h2 id="monthTitle"></h2>
-        <button class="nav" id="nextMonth" type="button" aria-label="החודש הבא">‹</button>
+        <button class="nav" id="nextMonth" type="button" aria-label="החודש הבא">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
       <div class="weekdays" aria-hidden="true">
         <span>א׳</span><span>ב׳</span><span>ג׳</span><span>ד׳</span><span>ה׳</span><span>ו׳</span><span>ש׳</span>
       </div>
       <div class="grid" id="grid" role="grid"></div>
       <div class="legend">
-        <span><i class="dot"></i> יש מועדים פנויים</span>
-        <span id="legendBooked" hidden><i class="dot booked"></i> נקבע מפגש</span>
+        <span><i class="cchip free">18:00</i> מועד פנוי</span>
+        <span id="legendBooked" hidden><i class="cchip booked">18:00</i> נקבע מפגש</span>
       </div>
     </section>
 
