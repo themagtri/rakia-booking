@@ -154,7 +154,7 @@ function book_(body) {
       ],
       conferenceData: { createRequest: { requestId: id, conferenceSolutionKey: { type: 'hangoutsMeet' } } },
       reminders: { useDefault: true }
-    }, CONFIG.CALENDAR_ID, { conferenceDataVersion: 1, sendUpdates: 'all' });
+    }, CONFIG.CALENDAR_ID, { conferenceDataVersion: 1, sendUpdates: 'none' });   // בלי אימייל נפרד מ-Google
 
     const meetLink = event.hangoutLink || '';
     appendRow_(sheet_(), [
@@ -167,12 +167,12 @@ function book_(body) {
 
     const b = {
       email: user.email, name: user.name, phone: person.phone, date: date, time: time,
-      meetLink: meetLink, duration: CONFIG.DURATION_MINUTES
+      meetLink: meetLink, duration: CONFIG.DURATION_MINUTES,
+      iCalUID: event.iCalUID || '', eventLink: event.htmlLink || '', seq: event.sequence || 0
     };
     sendConfirmation_(b);
     if (CONFIG.NOTIFY_OWNER) {
       b.isNew = isNew;
-      b.eventLink = event.htmlLink || '';
       b.sheetUrl = SpreadsheetApp.getActiveSpreadsheet().getUrl();
       sendOwnerNotice_(b);
     }
@@ -577,7 +577,8 @@ function confirmationEmail_(b) {
       buttonNote: b.meetLink ? esc_(b.meetLink) : '',
       note: CHANGE_NOTE_,
       small: [
-        'ההזמנה נשלחה גם ליומן Google שלך. אם היא מופיעה כ"הזמנה משולח לא מוכר", יש ללחוץ "כן" באישור ההשתתפות, והמפגש יתווסף ליומן.',
+        'ההזמנה ליומן מצורפת לאימייל הזה. כדי שהמפגש יופיע ביומן שלך, יש ללחוץ "כן" או "הוספה ליומן"' +
+          (b.eventLink ? ', או <a href="' + esc_(b.eventLink) + '" style="color:' + E_.accentDark + '">לפתוח את המפגש ב-Google Calendar</a>' : '') + '.',
         'תזכורת תישלח יום לפני המפגש, ושוב שעתיים לפניו.'
       ]
     })
@@ -655,7 +656,65 @@ function ownerEmail_html_(b) {
 /* ---------- שליחה ---------- */
 
 function send_(to, mail) {
-  MailApp.sendEmail({ to: to, subject: mail.subject, htmlBody: mail.html, name: SENDER_NAME });
+  const msg = { to: to, subject: mail.subject, htmlBody: mail.html, name: SENDER_NAME };
+  if (mail.attachments && mail.attachments.length) msg.attachments = mail.attachments;
+  MailApp.sendEmail(msg);
+}
+
+/* ---------- הזמנה ליומן בתוך האימייל (קובץ ics) ---------- */
+
+function icsEscape_(t) {
+  return String(t || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+}
+
+/** קיפול שורות לפי התקן (עד 75 בייט בשורה), כולל טקסט בעברית */
+function icsFold_(line) {
+  const out = [];
+  let cur = '', bytes = 0;
+  for (const ch of line) {
+    const n = Utilities.newBlob(ch).getBytes().length;
+    if (bytes + n > 73) { out.push(cur); cur = ' '; bytes = 1; }
+    cur += ch; bytes += n;
+  }
+  out.push(cur);
+  return out.join('\r\n');
+}
+
+function icsDate_(d) { return Utilities.formatDate(d, 'UTC', "yyyyMMdd'T'HHmmss'Z'"); }
+
+/** method: 'REQUEST' (הזמנה) או 'CANCEL' (ביטול) */
+function buildIcs_(b, method) {
+  const start = slotStart_(b.date, b.time);
+  const end = new Date(start.getTime() + (b.duration || CONFIG.DURATION_MINUTES) * 60000);
+  const owner = ownerEmail_();
+  const uid = b.iCalUID || (String(b.eventId || Utilities.getUuid()) + '@google.com');
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'PRODID:-//Rakia//Booking//HE',
+    'VERSION:2.0',
+    'CALSCALE:GREGORIAN',
+    'METHOD:' + method,
+    'BEGIN:VEVENT',
+    'UID:' + uid,
+    'DTSTAMP:' + icsDate_(new Date()),
+    'DTSTART:' + icsDate_(start),
+    'DTEND:' + icsDate_(end),
+    'SEQUENCE:' + (b.seq || 0),
+    'STATUS:' + (method === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED'),
+    'SUMMARY:' + icsEscape_(CONFIG.MEETING_TITLE),
+    'DESCRIPTION:' + icsEscape_('מפגש אימון אישי עם ' + CONFIG.OWNER_NAME + '.' +
+      (b.meetLink ? '\nקישור ל-Google Meet: ' + b.meetLink : '') +
+      '\nלשינוי או ביטול: לכתוב ללורן בוואטסאפ, לפחות 24 שעות מראש.'),
+    'LOCATION:' + icsEscape_(b.meetLink || 'Google Meet'),
+    'ORGANIZER;CN=' + icsEscape_(CONFIG.OWNER_NAME) + ':mailto:' + owner,
+    'ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=' +
+      icsEscape_(b.name) + ':mailto:' + b.email,
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ];
+  const body = lines.map(icsFold_).join('\r\n') + '\r\n';
+  return Utilities.newBlob(body, 'text/calendar; charset=UTF-8; method=' + method,
+    method === 'CANCEL' ? 'cancel.ics' : 'invite.ics');
 }
 
 function withDuration_(b) {
@@ -663,9 +722,17 @@ function withDuration_(b) {
   return b;
 }
 
-function sendConfirmation_(b) { send_(b.email, confirmationEmail_(withDuration_(b))); }
+function sendConfirmation_(b) {
+  const mail = confirmationEmail_(withDuration_(b));
+  try { mail.attachments = [buildIcs_(b, 'REQUEST')]; } catch (err) { console.error(err); }
+  send_(b.email, mail);
+}
 function sendReminder_(b, kind) { send_(b.email, reminderEmail_(withDuration_(b), kind)); }
-function sendCancellation_(b) { send_(b.email, cancellationEmail_(withDuration_(b))); }
+function sendCancellation_(b) {
+  const mail = cancellationEmail_(withDuration_(b));
+  try { if (b.iCalUID) mail.attachments = [buildIcs_(b, 'CANCEL')]; } catch (err) { console.error(err); }
+  send_(b.email, mail);
+}
 function sendOwnerNotice_(b) { send_(ownerEmail_(), ownerEmail_html_(withDuration_(b))); }
 
 /* ---------- תזכורת בוואטסאפ (חצי-אוטומטית: נפתחת בוואטסאפ שלך עם הודעה מוכנה) ---------- */
@@ -732,7 +799,11 @@ function ownerCancel_(body) {
 
 function cancelBooking_(b, notify) {
   try {
-    Calendar.Events.remove(CONFIG.CALENDAR_ID, b.eventId, { sendUpdates: 'all' });
+    const ev = Calendar.Events.get(CONFIG.CALENDAR_ID, b.eventId);
+    b.iCalUID = ev.iCalUID; b.seq = (ev.sequence || 0) + 1;
+  } catch (err) { /* האירוע כבר נמחק */ }
+  try {
+    Calendar.Events.remove(CONFIG.CALENDAR_ID, b.eventId, { sendUpdates: 'none' });
   } catch (err) { /* האירוע כבר נמחק */ }
   const sh = sheet_();
   sh.getRange(b.row, COL.status).setValue('cancelled');
