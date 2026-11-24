@@ -244,6 +244,10 @@
     const u = state.user;
     $("signedOut").hidden = !!u;
     $("signedIn").hidden = !u;
+    // המועדים מוצגים רק אחרי התחברות
+    $("gate").hidden = !!u;
+    $("calCard").hidden = !u;
+    $("slots").hidden = !u;
     if (u) {
       $("userName").textContent = u.name;
       $("userEmail").textContent = u.email;

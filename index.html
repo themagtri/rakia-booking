@@ -17,7 +17,7 @@
       <h1>הרשמה למפגשי אימון אישי</h1>
       <p class="program">תוכנית רקיע</p>
       <p class="name">לורן זילברשטין</p>
-      <p class="sub">בחרו יום ושעה פנויים, התחברו עם חשבון Google ואשרו את המפגש.</p>
+      <p class="sub">התחברו עם חשבון Google, בחרו יום ושעה פנויים ואשרו את המפגש.</p>
     </header>
 
     <section class="account card" id="account">
@@ -39,7 +39,11 @@
 
     <section class="card notice" id="myBookings" hidden></section>
 
-    <section class="card cal">
+    <section class="card gate" id="gate">
+      <p class="center">כדי לראות את המועדים הפנויים, התחברו עם חשבון Google למעלה.</p>
+    </section>
+
+    <section class="card cal" id="calCard" hidden>
       <div class="cal-head">
         <button class="nav" id="prevMonth" type="button" aria-label="החודש הקודם">›</button>
         <h2 id="monthTitle"></h2>
@@ -54,7 +58,7 @@
       </div>
     </section>
 
-    <section class="card slots" id="slots">
+    <section class="card slots" id="slots" hidden>
       <p class="muted center">בחרו יום מסומן בלוח כדי לראות את השעות הפנויות.</p>
     </section>
 

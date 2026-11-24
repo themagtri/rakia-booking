@@ -62,6 +62,8 @@ body {
 }
 
 .muted { color: var(--muted); }
+.card[hidden] { display: none; }
+.gate { padding: 36px 20px; color: var(--muted); background: var(--accent-soft); border-color: #d6e2db; }
 .center { text-align: center; margin: 0; }
 
 /* account */
