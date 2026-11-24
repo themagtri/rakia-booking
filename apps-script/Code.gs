@@ -57,7 +57,7 @@ function doPost(e) {
           ok: true,
           duration: CONFIG.DURATION_MINUTES,
           slots: futureSlots_(),
-          taken: takenSlots_(),
+          taken: takenSlots_(active),
           profile: me ? { fullName: me.fullName, phone: me.phone } : null,
           bookings: active.filter(b => b.email === user.email)
             .map(b => ({ date: b.date, time: b.time, meetLink: b.meetLink }))
@@ -185,6 +185,25 @@ function book_(body) {
 
 function verify_(idToken) {
   if (!idToken) return null;
+  // מהירות: אימות שכבר נעשה נשמר בזיכרון של השרת עד שתוקף הכניסה פג (עד שעה)
+  const cache = CacheService.getScriptCache();
+  const key = 'tok_' + Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken)).slice(0, 40);
+  const hit = cache.get(key);
+  if (hit) {
+    const u = JSON.parse(hit);
+    if (u.exp * 1000 > Date.now()) return { email: u.email, name: u.name };
+  }
+  const user = verifyRemote_(idToken);
+  if (user) {
+    const ttl = Math.min(3500, Math.floor(user.exp - Date.now() / 1000));
+    if (ttl > 30) cache.put(key, JSON.stringify(user), ttl);
+    return { email: user.email, name: user.name };
+  }
+  return null;
+}
+
+function verifyRemote_(idToken) {
   const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken),
     { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) return null;
@@ -192,7 +211,7 @@ function verify_(idToken) {
   if (info.aud !== CONFIG.CLIENT_ID) return null;
   if (String(info.email_verified) !== 'true') return null;
   if (Number(info.exp) * 1000 < Date.now()) return null;
-  return { email: String(info.email).toLowerCase(), name: info.name || info.email };
+  return { email: String(info.email).toLowerCase(), name: info.name || info.email, exp: Number(info.exp) };
 }
 
 function ownerEmail_() { return String(Session.getEffectiveUser().getEmail()).toLowerCase(); }
@@ -254,9 +273,9 @@ function allBookings_() {
 
 function activeBookings_() { return allBookings_().filter(b => b.status === 'active'); }
 
-function takenSlots_() {
+function takenSlots_(active) {
   const today = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd');
-  return activeBookings_().filter(b => b.date >= today).map(b => b.date + ' ' + b.time);
+  return (active || activeBookings_()).filter(b => b.date >= today).map(b => b.date + ' ' + b.time);
 }
 
 function availability_() {

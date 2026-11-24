@@ -154,25 +154,54 @@
     return res.json();
   }
 
+  /* זיכרון מקומי: הנתונים מהביקור הקודם מוצגים מיד, ומתעדכנים ברקע מהשרת.
+     ההרשמה עצמה תמיד נבדקת מול השרת, כך שמועד שנתפס בינתיים לא יירשם פעמיים. */
+  const CACHE_KEY = (email) => "rakia-init:" + String(email).toLowerCase();
+
+  function applyInit(data) {
+    state.duration = data.duration || 50;
+    state.slots = data.slots || {};
+    state.taken = new Set(data.taken || []);
+    state.mine = data.bookings || [];
+    state.profile = data.profile || null;
+    state.isOwner = !!data.isOwner;
+    state.all = data.all || [];
+  }
+
+  function readCache(email) {
+    try {
+      const c = JSON.parse(localStorage.getItem(CACHE_KEY(email)) || "null");
+      if (c && Date.now() - c.at < 7 * 24 * 3600 * 1000) return c.data;
+    } catch (e) { /* אין זיכרון זמין */ }
+    return null;
+  }
+
+  function writeCache(email, data) {
+    try { localStorage.setItem(CACHE_KEY(email), JSON.stringify({ at: Date.now(), data })); } catch (e) { /* */ }
+  }
+
+  function setSyncing(on) {
+    const el = $("syncing");
+    if (el) el.hidden = !on;
+  }
+
   /** טוען הכול אחרי התחברות: מועדים, תפוסים, המפגשים שלי, ואם זה הבעלים — גם ניהול */
   async function loadInit() {
     if (!state.user) return;
     if (DEMO) return;
+    setSyncing(true);
     try {
       const data = await api({ action: "init", idToken: state.user.token });
       if (data.ok) {
-        state.duration = data.duration || 50;
-        state.slots = data.slots || {};
-        state.taken = new Set(data.taken || []);
-        state.mine = data.bookings || [];
-        state.profile = data.profile || null;
-        state.isOwner = !!data.isOwner;
-        state.all = data.all || [];
+        applyInit(data);
+        writeCache(state.user.email, data);
       } else if (data.error === "auth") {
         toast("פג תוקף ההתחברות. התנתקו והתחברו שוב.");
       }
     } catch (e) {
       toast("לא הצלחנו לטעון את לוח המועדים. נסו לרענן את הדף.");
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -189,7 +218,10 @@
     const info = decodeJwt(resp.credential);
     state.user = { email: info.email, name: info.name || info.email, picture: info.picture || "", token: resp.credential };
     renderAccount();
-    $("slots").innerHTML = '<p class="muted center">טוענים את המועדים...</p>';
+    // מציגים מיד את מה שנשמר מהביקור הקודם, ובמקביל מביאים מהשרת את המצב העדכני
+    const cached = DEMO ? null : readCache(info.email);
+    if (cached) { applyInit(cached); renderAll(); }
+    else { $("slots").innerHTML = '<p class="muted center">טוענים את המועדים...</p>'; }
     await loadInit();
     renderAll();
   }
@@ -255,36 +287,58 @@
     }
   }
 
+  function fixPhone(p) {
+    const v = String(p || "").trim();
+    return /^5\d{8}$/.test(v) ? "0" + v : v;   // ה-0 שנעלם כש-Sheets שמר את המספר כמספר
+  }
+
+  /** "המפגשים שלי" ליום אחד, עם חצים למעבר בין ימים (רק לבעלים) */
   function renderOwner() {
     const box = $("ownerPanel");
     if (!state.isOwner) { box.hidden = true; return; }
     box.hidden = false;
+    const today = todayStr();
+    if (!state.agendaDay) state.agendaDay = today;
+    const ds = state.agendaDay;
     const same = sameZoneAsIsrael();
-    let html = "<h3>המפגשים הקרובים</h3>" +
-      '<p class="meta">מצב ניהול: מופיע רק לך. ' +
-      (same ? "אזור הזמן במחשב כרגע זהה לישראל." : "שעון מקומי לפי המחשב: " + escapeHtml(deviceZoneLabel())) + "</p>";
-    const SHOW = 3;
-    const list = state.showAllUpcoming ? state.all : state.all.slice(0, SHOW);
-    if (!state.all.length) {
-      html += '<p class="muted" style="margin:0">אין עדיין מפגשים קרובים.</p>';
+    const dayList = state.all.filter((b) => b.date === ds).sort((a, b) => a.time.localeCompare(b.time));
+    const next = state.all.filter((b) => b.date > ds).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
+    const prev = state.all.filter((b) => b.date < ds && b.date >= today).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))[0];
+    const arrowR = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const arrowL = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    let html = '<div class="agenda-head">' +
+      '<button type="button" class="nav" id="agPrev" aria-label="היום הקודם"' + (ds <= today ? " disabled" : "") + ">" + arrowR + "</button>" +
+      '<div class="agenda-title"><h3>' + (ds === today ? "היום · " : ds === addDays(today, 1) ? "מחר · " : "") + fmtLongDate(ds) +
+      (dayList.length ? ' <span class="count">' + dayList.length + "</span>" : "") + "</h3>" +
+      '<p class="meta">המפגשים שלי · מופיע רק לך' + (same ? "" : " · שעון מקומי: " + escapeHtml(deviceZoneLabel())) + "</p></div>" +
+      '<button type="button" class="nav" id="agNext" aria-label="היום הבא">' + arrowL + "</button></div>";
+
+    if (!dayList.length) {
+      html += '<p class="muted agenda-empty">אין מפגשים ביום הזה.</p>';
     } else {
-      html += "<ul>" + list.map((b) =>
-        '<li class="upcoming" data-d="' + b.date + '" data-t="' + b.time + '" tabindex="0" role="button" title="פרטים וביטול">' +
-        "<strong>" + escapeHtml(b.name) + "</strong> · " + escapeHtml(b.email) +
-        (b.phone ? ' · <a href="tel:' + escapeHtml(b.phone.replace(/[^\d+]/g, "")) + '" dir="ltr">' + escapeHtml(b.phone) + "</a>" : "") + "<br>" +
-        fmtLongDate(b.date) + " · " + b.time + " שעון ישראל" +
-        (same ? "" : ' · <span class="local">' + localTime(b.date, b.time) + " אצלך</span>") +
-        (b.meetLink ? '<br><a href="' + escapeHtml(b.meetLink) + '" target="_blank" rel="noopener">קישור ל-Meet</a>' : "") +
-        "</li>").join("") + "</ul>";
-      if (state.all.length > SHOW) {
-        html += '<button type="button" class="link small" id="toggleUpcoming">' +
-          (state.showAllUpcoming ? "הצגת פחות" : "הצגת כל " + state.all.length + " המפגשים") + "</button>";
-      }
+      html += '<ul class="agenda">' + dayList.map((b) => {
+        const phone = fixPhone(b.phone);
+        return '<li class="upcoming" data-d="' + b.date + '" data-t="' + b.time + '" tabindex="0" role="button" title="פרטים וביטול">' +
+          '<span class="ag-time"><b>' + b.time + "</b>" + (same ? "" : "<small>" + localTime(b.date, b.time) + " אצלך</small>") + "</span>" +
+          '<span class="ag-who"><strong>' + escapeHtml(b.name) + "</strong>" +
+          "<small>" + escapeHtml(b.email) + (phone ? ' · <a href="tel:' + escapeHtml(phone.replace(/[^\d+]/g, "")) + '" dir="ltr">' + escapeHtml(phone) + "</a>" : "") + "</small></span>" +
+          (b.meetLink ? '<a class="ag-meet" href="' + escapeHtml(b.meetLink) + '" target="_blank" rel="noopener">Meet</a>' : "") +
+          "</li>";
+      }).join("") + "</ul>";
     }
-    html = html.replace("<h3>המפגשים הקרובים</h3>", "<h3>המפגשים הקרובים" +
-      (state.all.length ? ' <span class="count">' + state.all.length + "</span>" : "") + "</h3>");
+    const links = [];
+    if (ds !== today) links.push('<button type="button" class="link small" id="agToday">חזרה להיום</button>');
+    if (prev) links.push('<button type="button" class="link small" data-jump="' + prev.date + '">המפגש הקודם: ' + fmtLongDate(prev.date) + "</button>");
+    if (next) links.push('<button type="button" class="link small" data-jump="' + next.date + '">המפגש הבא: ' + fmtLongDate(next.date) + "</button>");
+    if (links.length) html += '<div class="agenda-links">' + links.join("") + "</div>";
     box.innerHTML = html;
-    if ($("toggleUpcoming")) $("toggleUpcoming").onclick = () => { state.showAllUpcoming = !state.showAllUpcoming; renderOwner(); };
+
+    const go = (d) => { state.agendaDay = d < today ? today : d; renderOwner(); };
+    $("agPrev").onclick = () => go(addDays(ds, -1));
+    $("agNext").onclick = () => go(addDays(ds, 1));
+    if ($("agToday")) $("agToday").onclick = () => go(today);
+    box.querySelectorAll("[data-jump]").forEach((b) => (b.onclick = () => go(b.dataset.jump)));
     box.querySelectorAll("li.upcoming").forEach((li) => {
       const open = (e) => { if (e.target.closest("a")) return; showBooking(li.dataset.d, li.dataset.t); };
       li.onclick = open;
@@ -403,7 +457,7 @@
       body += '<dl class="info">' +
         "<dt>שם</dt><dd>" + escapeHtml(b.name) + "</dd>" +
         '<dt>אימייל</dt><dd><a href="mailto:' + escapeHtml(b.email) + '">' + escapeHtml(b.email) + "</a></dd>" +
-        (b.phone ? '<dt>טלפון</dt><dd><a dir="ltr" href="tel:' + escapeHtml(b.phone.replace(/[^\d+]/g, "")) + '">' + escapeHtml(b.phone) + "</a></dd>" : "") +
+        (b.phone ? '<dt>טלפון</dt><dd><a dir="ltr" href="tel:' + escapeHtml(fixPhone(b.phone).replace(/[^\d+]/g, "")) + '">' + escapeHtml(fixPhone(b.phone)) + "</a></dd>" : "") +
         "</dl>";
     }
     const actions = [];

@@ -188,6 +188,37 @@ dl.info dd { margin: 0; }
 dl.info a { color: var(--accent-dark); }
 .owner-tools h3 { margin: 0 0 4px; font-weight: 600; font-size: 16px; }
 .owner-tools .meta { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+/* daily agenda (owner) */
+.agenda-head { display: flex; align-items: center; gap: 12px; }
+.agenda-title { flex: 1; text-align: center; min-width: 0; }
+.agenda-title h3 { margin: 0; font-size: 18px; font-weight: 600; }
+.agenda-title .meta { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.agenda { list-style: none; margin: 14px 0 0; padding: 0; }
+.agenda li {
+  display: flex; align-items: center; gap: 14px; padding: 10px 12px; margin-top: 8px;
+  border: 1px solid var(--line); border-right: 3px solid #c9a35c; border-radius: 10px; background: var(--surface); cursor: pointer;
+}
+.agenda li:hover { background: var(--accent-soft); }
+.ag-time { display: flex; flex-direction: column; min-width: 64px; }
+.ag-time b { font-size: 18px; font-weight: 600; }
+.ag-time small, .ag-who small { font-size: 12.5px; color: var(--muted); }
+.ag-time small { color: var(--accent-dark); }
+.ag-who { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ag-who small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-who a { color: var(--accent-dark); }
+.owner .ag-meet, .ag-meet {
+  font-size: 13px; font-weight: 600; padding: 5px 14px; border-radius: 999px; background: var(--accent); color: #fff; text-decoration: none;
+}
+.owner .ag-meet:hover { background: var(--accent-dark); }
+.agenda-empty { text-align: center; margin: 16px 0 4px; }
+.agenda-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 12px; }
+.syncing { margin: -4px 0 10px; font-size: 13px; color: var(--muted); text-align: center; }
+.syncing i {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-left: 4px;
+  border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .tools-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .tools-row input[type="month"] {
   font: inherit; font-size: 16px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text);
