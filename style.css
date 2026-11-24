@@ -235,7 +235,7 @@ pre.msg {
   white-space: pre-wrap; font: inherit; font-size: 14px; line-height: 1.6; margin: 0 0 8px;
   background: var(--sand); border-right: 3px solid #c9b98f; border-radius: 10px; padding: 12px 14px; max-height: 220px; overflow: auto;
 }
-.modal-box { max-height: 92vh; overflow: auto; }
+.modal-box { max-height: 92vh; overflow-y: auto; overflow-x: hidden; }
 .btn.danger { color: var(--danger); border-color: #e3c9c3; }
 .btn.danger:disabled { opacity: .45; cursor: default; }
 .btn.danger:hover { background: #f8ecea; }
@@ -349,7 +349,7 @@ pre.msg {
 .modal[hidden] { display: none; }
 .modal-box {
   background: var(--surface); border-radius: var(--radius); padding: 24px;
-  width: 100%; max-width: 400px; box-shadow: 0 10px 40px rgba(47, 58, 54, .15);
+  width: 100%; max-width: 460px; box-shadow: 0 10px 40px rgba(47, 58, 54, .15);
 }
 .modal-box h3 { margin: 0 0 10px; font-weight: 500; font-size: 20px; }
 .modal-box p { margin: 0 0 8px; }
@@ -362,7 +362,8 @@ pre.msg {
 .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .field-error { color: var(--danger); font-size: 14px; margin: 10px 0 0 !important; }
 .modal-box .muted { margin-top: 12px; }
-.modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-start; }
+.modal-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; justify-content: flex-start; }
+.modal-actions .btn { flex: 1 1 auto; min-width: 0; }
 
 .btn {
   border-radius: 10px; padding: 10px 20px; border: 1px solid var(--line); background: var(--surface);
