@@ -852,8 +852,11 @@
         '<label class="field">מספר טלפון<input id="fPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" dir="ltr" placeholder="050-0000000"></label>' +
         '<p class="field-error" id="fError" hidden></p>';
     }
-    body += '<p class="muted">אישור יישלח אל ' + escapeHtml(state.user.email) +
-      " והמפגש יתווסף ליומן Google שלכם עם קישור ל-Google Meet. אי אפשר לבטל דרך האתר.</p>";
+    body += '<ul class="confirm-list">' +
+      '<li><span class="ic">✉</span><span>אישור יישלח לאימייל<br><bdi class="em">' + escapeHtml(state.user.email) + "</bdi></span></li>" +
+      '<li><span class="ic">📅</span><span>המפגש יתווסף ליומן Google שלכם, עם קישור ל-Google Meet</span></li>' +
+      '<li><span class="ic">💬</span><span>לשינוי או ביטול יש לפנות ללורן בוואטסאפ, לפחות 24 שעות מראש</span></li>' +
+      "</ul>";
     modal(firstTime ? "הרשמה ראשונה" : "אישור מפגש", body, [
       { label: "אישור ההרשמה", primary: true, onClick: (e) => book(ds, t, e.target, firstTime) },
       { label: "חזרה", onClick: closeModal }
