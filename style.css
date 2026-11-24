@@ -13,6 +13,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body { margin: 0; }
 
@@ -28,19 +29,45 @@ body {
 .page {
   max-width: 880px;
   margin: 0 auto;
-  padding: 48px 16px 64px;
+  padding: 20px 16px 64px;
 }
 
-.top { text-align: center; margin-bottom: 28px; }
-.top h1 {
-  font-weight: 500;
-  font-size: 30px;
-  letter-spacing: 0.2px;
-  margin: 0 0 6px;
+/* header with photo (Unsplash License · Chris Vasquez) */
+.hero {
+  position: relative;
+  color: #fff;
+  text-align: center;
+  background: #3a4a43 url("https://images.unsplash.com/photo-1654356709115-3f68998bead4?auto=format&fit=crop&w=1800&q=70") center 62% / cover no-repeat;
+  padding: 76px 16px 84px;
+  overflow: hidden;
 }
-.program { margin: 0; font-size: 19px; color: var(--accent-dark); letter-spacing: .5px; }
-.name { margin: 2px 0 14px; color: var(--muted); font-size: 16px; }
-.sub { color: var(--muted); margin: 0; font-size: 15px; }
+.hero::before {
+  /* שכבה כהה ורכה מעל התמונה, כדי שהטקסט הלבן יהיה קריא */
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(26, 38, 33, .58) 0%, rgba(26, 38, 33, .66) 60%, rgba(26, 38, 33, .74) 100%);
+}
+.hero::after {
+  /* מעבר רך לרקע של הדף */
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 36px;
+  background: var(--bg); border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+}
+.hero-inner { position: relative; z-index: 1; max-width: 640px; margin: 0 auto; }
+.hero h1 {
+  margin: 6px 0 8px; font-weight: 500; font-size: 36px; line-height: 1.25; letter-spacing: .2px;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, .35);
+}
+.hero .program {
+  margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 3px; color: #d9e8df;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, .4);
+}
+.hero .name { margin: 0 0 16px; font-size: 17px; color: #eef3f0; text-shadow: 0 1px 10px rgba(0, 0, 0, .4); }
+.hero .sub {
+  display: inline-block; margin: 0; padding: 8px 16px; border-radius: 999px; font-size: 15px;
+  color: #fff; background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .22);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.photo-credit { margin-top: 18px; font-size: 12px; color: var(--muted); text-align: center; }
+.photo-credit a { color: inherit; }
 
 /* owner panel */
 .owner h3 { margin: 0 0 4px; font-weight: 600; font-size: 17px; }
@@ -126,7 +153,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .day.clickable { color: var(--text); border-color: var(--line); background: var(--surface); cursor: pointer; }
 .day.clickable:hover { border-color: var(--accent); }
 .day.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.day.disabled { cursor: default; }
+.day.disabled { cursor: default; min-height: 52px; }   /* ימים שעברו / בלי מועדים תופסים פחות מקום */
 .cchips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .cchip {
   display: block; width: 100%; min-width: 0; text-align: right; font: inherit; font-style: normal;
@@ -151,7 +178,11 @@ dl.info { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin:
 dl.info dt { color: var(--muted); font-size: 14px; }
 dl.info dd { margin: 0; }
 dl.info a { color: var(--accent-dark); }
+.owner-tools h3 { margin: 0 0 4px; font-weight: 600; font-size: 16px; }
+.owner-tools .meta { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.tools-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .btn.danger { color: var(--danger); border-color: #e3c9c3; }
+.btn.danger:disabled { opacity: .45; cursor: default; }
 .btn.danger:hover { background: #f8ecea; }
 .owner-hint {
   margin: -4px 0 14px; padding: 8px 12px; border-radius: 10px; font-size: 14px;
@@ -291,11 +322,22 @@ dl.info a { color: var(--accent-dark); }
 }
 
 @media (max-width: 480px) {
-  .page { padding-top: 32px; }
-  .top h1 { font-size: 26px; }
+  .page { padding-top: 12px; }
+  .hero { padding: 52px 18px 62px; background-image: url("https://images.unsplash.com/photo-1654356709115-3f68998bead4?auto=format&fit=crop&w=900&q=70"); }
+  .hero h1 { font-size: 27px; }
+  .hero .name { font-size: 16px; }
+  .hero .sub { font-size: 14px; border-radius: 14px; }
   .card { padding: 16px; }
   .weekdays, .grid { gap: 3px; }
   .day { min-height: 74px; border-radius: 8px; padding: 4px 2px; gap: 2px; }
+  .day.disabled { min-height: 38px; }
+  .account #signedOut { flex-direction: column; text-align: center; }
+  .modal { align-items: end; padding: 0; }
+  .modal-box { max-width: none; border-radius: 18px 18px 0 0; padding: 22px 18px calc(22px + env(safe-area-inset-bottom)); }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions .btn { width: 100%; padding: 13px; }
+  .times { grid-template-columns: repeat(3, 1fr); }
+  .time { padding: 12px 0; }
   .day .num { font-size: 13px; }
   .cchip { font-size: 10.5px; padding: 2px 3px; border-right-width: 2px; text-align: center; }
   .cchip.booked b { display: none; }

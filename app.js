@@ -326,6 +326,7 @@
     $("prevMonth").disabled = y * 12 + m <= min.y * 12 + min.m;
     $("nextMonth").disabled = y * 12 + m >= max.y * 12 + max.m;
     $("ownerHint").hidden = !state.isOwner;
+    renderOwnerTools();   // הכפתורים תלויים בחודש המוצג ובמועדים
     $("legendBooked").hidden = !state.isOwner;
 
     const grid = $("grid");
@@ -485,7 +486,53 @@
     });
   }
 
+  /* ---------- ניקוי מועדים בבת אחת (רק לבעלים) ---------- */
+
+  function freeSlotList(filterMonth) {
+    const out = [];
+    Object.keys(state.slots).forEach((d) => {
+      if (filterMonth && monthKey(d) !== filterMonth) return;
+      freeTimes(d).forEach((t) => { if (!state.taken.has(d + " " + t)) out.push([d, t]); });
+    });
+    return out;
+  }
+
+  function renderOwnerTools() {
+    const box = $("ownerTools");
+    box.hidden = !state.isOwner;
+    if (!state.isOwner) return;
+    const { y, m } = state.view;
+    const mk = ymd(y, m, 1).slice(0, 7);
+    const monthName = fmtMonth(y, m);
+    const inMonth = freeSlotList(mk);
+    const all = freeSlotList(null);
+    const bm = $("clearMonth"), ba = $("clearAll");
+    bm.textContent = "ריקון המועדים של " + monthName + (inMonth.length ? " (" + inMonth.length + ")" : "");
+    ba.textContent = "ריקון כל המועדים" + (all.length ? " (" + all.length + ")" : "");
+    bm.disabled = !inMonth.length;
+    ba.disabled = !all.length;
+    bm.onclick = () => confirmClear(inMonth, "כל " + inMonth.length + " המועדים הפנויים של " + monthName);
+    ba.onclick = () => confirmClear(all, "כל " + all.length + " המועדים הפנויים, בכל החודשים");
+  }
+
+  function confirmClear(list, what) {
+    if (!list.length) return;
+    modal("למחוק את המועדים?",
+      "<p>עומדים להימחק <strong>" + what + "</strong>.</p>" +
+      '<p class="muted">מפגשים שכבר נקבעו לא יימחקו. אי אפשר לבטל את המחיקה, אבל אפשר תמיד לפתוח מועדים מחדש.</p>' +
+      "<p><strong>האם למחוק?</strong></p>",
+      [
+        { label: "כן, למחוק", danger: true, onClick: async (e) => {
+          e.target.disabled = true; e.target.textContent = "מוחקים...";
+          await removeSlots(list);
+          closeModal();
+        } },
+        { label: "לא", primary: true, onClick: closeModal }
+      ]);
+  }
+
   function renderAll() {
+    renderOwnerTools();
     renderOwner();
     renderMine();
     renderCalendar();

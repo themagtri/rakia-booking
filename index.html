@@ -12,13 +12,16 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-  <main class="page">
-    <header class="top">
-      <h1>הרשמה למפגשי אימון אישי</h1>
+  <header class="hero">
+    <div class="hero-inner">
       <p class="program">תוכנית רקיע</p>
+      <h1>הרשמה למפגשי אימון אישי</h1>
       <p class="name">לורן זילברשטין</p>
       <p class="sub">התחברו עם חשבון Google, בחרו יום ושעה פנויים ואשרו את המפגש.</p>
-    </header>
+    </div>
+  </header>
+
+  <main class="page">
 
     <section class="account card" id="account">
       <div id="signedOut">
@@ -69,6 +72,15 @@
       <p class="muted center">בחרו יום מסומן בלוח כדי לראות את השעות הפנויות.</p>
     </section>
 
+    <section class="card owner-tools" id="ownerTools" hidden>
+      <h3>ניקוי מועדים</h3>
+      <p class="meta">מוחק רק מועדים פנויים. מפגשים שכבר נקבעו נשארים כמו שהם.</p>
+      <div class="tools-row">
+        <button type="button" class="btn danger" id="clearMonth">ריקון המועדים של החודש</button>
+        <button type="button" class="btn danger" id="clearAll">ריקון כל המועדים</button>
+      </div>
+    </section>
+
     <section class="terms">
       <h3>כמה מילים לפני שנפגשים</h3>
       <ul>
@@ -82,6 +94,7 @@
         <p>אי אפשר לבטל או לשנות מפגש דרך האתר. אם משהו משתנה, כתבו לי <strong>בוואטסאפ</strong> כמה שיותר מוקדם, <strong>ולפחות 24 שעות לפני המפגש</strong>. אחרי שאבטל את המפגש, תוכלו לבחור כאן מועד חדש.</p>
       </div>
     </section>
+    <p class="photo-credit">תמונה: <a href="https://unsplash.com/photos/ib4VRerGeDA" target="_blank" rel="noopener">Chris Vasquez / Unsplash</a></p>
   </main>
 
   <div class="modal" id="modal" hidden>
