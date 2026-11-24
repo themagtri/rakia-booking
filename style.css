@@ -185,6 +185,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .modal-box h3 { margin: 0 0 10px; font-weight: 500; font-size: 20px; }
 .modal-box p { margin: 0 0 8px; }
+.field { display: block; margin: 12px 0 0; font-size: 15px; color: var(--muted); }
+.field input {
+  display: block; width: 100%; margin-top: 4px; padding: 10px 12px;
+  font: inherit; font-size: 16px; color: var(--text);
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+}
+.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field-error { color: var(--danger); font-size: 14px; margin: 10px 0 0 !important; }
+.modal-box .muted { margin-top: 12px; }
 .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-start; }
 
 .btn {

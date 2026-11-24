@@ -26,6 +26,10 @@ const HEADERS = ['id', 'createdAt', 'email', 'name', 'date', 'time', 'eventId', 
 const COL = {};
 HEADERS.forEach((h, i) => (COL[h] = i + 1));
 
+// טבלת המשתתפים: נמלאת פעם אחת לכל אימייל, בהרשמה הראשונה
+const PEOPLE_SHEET = 'Participants';
+const PEOPLE_HEADERS = ['email', 'fullName', 'phone', 'googleName', 'createdAt'];
+
 /* ================= Web App ================= */
 
 function doGet() {
@@ -44,8 +48,11 @@ function doPost(e) {
         const user = verify_(body.idToken);
         if (!user) return json_({ ok: false, error: 'auth' });
         const active = activeBookings_();
+        const people = participants_();
+        const me = people[user.email];
         const res = {
           ok: true,
+          profile: me ? { fullName: me.fullName, phone: me.phone } : null,
           bookings: active.filter(b => b.email === user.email)
             .map(b => ({ date: b.date, time: b.time, meetLink: b.meetLink }))
         };
@@ -55,7 +62,10 @@ function doPost(e) {
           res.isOwner = true;
           res.all = active.filter(b => slotStart_(b.date, b.time).getTime() > now - 3600000)
             .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
-            .map(b => ({ name: b.name, email: b.email, date: b.date, time: b.time, meetLink: b.meetLink }));
+            .map(b => ({
+              name: b.name, email: b.email, phone: people[b.email] ? people[b.email].phone : '',
+              date: b.date, time: b.time, meetLink: b.meetLink
+            }));
         }
         return json_(res);
       }
@@ -94,6 +104,19 @@ function book_(body) {
     const month = date.slice(0, 7);
     if (active.some(b => b.email === user.email && b.date.slice(0, 7) === month)) return { ok: false, error: 'limit' };
 
+    // הרשמה ראשונה: חובה שם מלא וטלפון, ונשמרים בטבלת המשתתפים
+    let person = participants_()[user.email];
+    if (!person) {
+      const fullName = String(body.fullName || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+      const phone = String(body.phone || '').trim().slice(0, 30);
+      if (fullName.split(' ').length < 2 || !/^[+\d][\d\s\-()]*$/.test(phone) || phone.replace(/\D/g, '').length < 9) {
+        return { ok: false, error: 'profile' };
+      }
+      peopleSheet_().appendRow([user.email, fullName, phone, user.name, new Date()]);
+      person = { fullName: fullName, phone: phone };
+    }
+    user.name = person.fullName;   // מכאן והלאה משתמשים בשם המלא שנמסר
+
     const id = Utilities.getUuid();
     // אירוע ביומן שלך + הזמנה ליומן של המשתמש + קישור Google Meet
     const event = Calendar.Events.insert({
@@ -120,8 +143,8 @@ function book_(body) {
     if (CONFIG.NOTIFY_OWNER) {
       MailApp.sendEmail(ownerEmail_(),
         'הרשמה חדשה: ' + user.name + ' – ' + hebDate_(date) + ' ' + time,
-        user.name + ' (' + user.email + ') נרשם/ה למפגש ב' + hebDate_(date) + ' בשעה ' + time + ' (שעון ישראל).\n' +
-        'Meet: ' + meetLink);
+        user.name + ' (' + user.email + ', ' + person.phone + ') נרשם/ה למפגש ב' + hebDate_(date) + ' בשעה ' + time +
+        ' (שעון ישראל).\nMeet: ' + meetLink);
     }
     return { ok: true, booking: { date: date, time: time, meetLink: meetLink } };
   } finally {
@@ -157,6 +180,29 @@ function sheet_() {
     sh.getRange('E:F').setNumberFormat('@');
   }
   return sh;
+}
+
+function peopleSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(PEOPLE_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(PEOPLE_SHEET);
+    sh.appendRow(PEOPLE_HEADERS);
+    sh.setFrozenRows(1);
+    sh.getRange('C:C').setNumberFormat('@');   // שומר את ה-0 בתחילת מספר הטלפון
+  }
+  return sh;
+}
+
+/** מחזיר { email: { fullName, phone } } */
+function participants_() {
+  const values = peopleSheet_().getDataRange().getValues();
+  const out = {};
+  for (let i = 1; i < values.length; i++) {
+    const email = String(values[i][0]).toLowerCase();
+    if (email) out[email] = { fullName: String(values[i][1]), phone: String(values[i][2]) };
+  }
+  return out;
 }
 
 function allBookings_() {
@@ -337,6 +383,7 @@ function onOpen() {
 /** להריץ פעם אחת מהעורך: יוצר את הגיליון ואת הטריגר שרץ כל 15 דקות */
 function setup() {
   sheet_();
+  peopleSheet_();
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('reminderJob').timeBased().everyMinutes(15).create();
 }

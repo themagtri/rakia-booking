@@ -12,6 +12,7 @@
     taken: new Set(),   // "YYYY-MM-DD HH:mm"
     user: null,         // { email, name, picture, token }
     mine: [],           // [{ date, time, meetLink }]
+    profile: null,      // { fullName, phone } — נשמר אחרי ההרשמה הראשונה
     isOwner: false,     // תצוגת בעלים (לורן): שעון ישראל + שעון מקומי
     all: [],            // כל המפגשים הקרובים (רק לבעלים)
     view: null,         // { y, m } (m = 0..11)
@@ -144,6 +145,7 @@
       const data = await api({ action: "mine", idToken: state.user.token });
       if (data.ok) {
         state.mine = data.bookings;
+        state.profile = data.profile || null;
         state.isOwner = !!data.isOwner;
         state.all = data.all || [];
       }
@@ -202,7 +204,7 @@
 
   function signOut() {
     if (window.google && google.accounts && CFG.googleClientId) google.accounts.id.disableAutoSelect();
-    state.user = null; state.mine = []; state.isOwner = false; state.all = [];
+    state.user = null; state.mine = []; state.isOwner = false; state.all = []; state.profile = null;
     renderAccount(); renderAll();
   }
 
@@ -229,7 +231,8 @@
       html += '<p class="muted" style="margin:0">אין עדיין מפגשים קרובים.</p>';
     } else {
       html += "<ul>" + state.all.map((b) =>
-        "<li><strong>" + escapeHtml(b.name) + "</strong> · " + escapeHtml(b.email) + "<br>" +
+        "<li><strong>" + escapeHtml(b.name) + "</strong> · " + escapeHtml(b.email) +
+        (b.phone ? ' · <a href="tel:' + escapeHtml(b.phone.replace(/[^\d+]/g, "")) + '" dir="ltr">' + escapeHtml(b.phone) + "</a>" : "") + "<br>" +
         fmtLongDate(b.date) + " · " + b.time + " שעון ישראל" +
         (same ? "" : ' · <span class="local">' + localTime(b.date, b.time) + " אצלך</span>") +
         (b.meetLink ? '<br><a href="' + escapeHtml(b.meetLink) + '" target="_blank" rel="noopener">קישור ל-Meet</a>' : "") +
@@ -373,18 +376,43 @@
         [{ label: "הבנתי", primary: true, onClick: () => { closeModal(); $("account").scrollIntoView({ behavior: "smooth" }); } }]);
       return;
     }
-    modal("אישור מפגש",
-      "<p><strong>" + fmtLongDate(ds) + "</strong> בשעה <strong>" + t + "</strong></p>" +
-      '<p class="muted">אישור יישלח אל ' + escapeHtml(state.user.email) +
-      " והמפגש יתווסף ליומן Google שלכם עם קישור ל-Google Meet. אי אפשר לבטל דרך האתר.</p>",
-      [
-        { label: "אישור ההרשמה", primary: true, onClick: (e) => book(ds, t, e.target) },
-        { label: "חזרה", onClick: closeModal }
-      ]);
+    const firstTime = !state.profile;   // פרטים אישיים נאספים רק בהרשמה הראשונה
+    let body = "<p><strong>" + fmtLongDate(ds) + "</strong> בשעה <strong>" + t + "</strong></p>";
+    if (firstTime) {
+      body +=
+        '<p class="muted">זו ההרשמה הראשונה שלכם, אז נבקש פעם אחת שם מלא ומספר טלפון.</p>' +
+        '<label class="field">שם מלא<input id="fFullName" type="text" autocomplete="name" maxlength="80" value="' +
+        escapeHtml(state.user.name || "") + '"></label>' +
+        '<label class="field">מספר טלפון<input id="fPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" dir="ltr" placeholder="050-0000000"></label>' +
+        '<p class="field-error" id="fError" hidden></p>';
+    }
+    body += '<p class="muted">אישור יישלח אל ' + escapeHtml(state.user.email) +
+      " והמפגש יתווסף ליומן Google שלכם עם קישור ל-Google Meet. אי אפשר לבטל דרך האתר.</p>";
+    modal(firstTime ? "הרשמה ראשונה" : "אישור מפגש", body, [
+      { label: "אישור ההרשמה", primary: true, onClick: (e) => book(ds, t, e.target, firstTime) },
+      { label: "חזרה", onClick: closeModal }
+    ]);
+    if (firstTime) $("fFullName").focus();
   }
 
-  async function book(ds, t, btn) {
+  function readProfileForm() {
+    const fullName = $("fFullName").value.trim().replace(/\s+/g, " ");
+    const phone = $("fPhone").value.trim();
+    const err = $("fError");
+    let msg = "";
+    if (fullName.split(" ").filter(Boolean).length < 2) msg = "נא לכתוב שם מלא (שם פרטי ושם משפחה).";
+    else if (!/^[+\d][\d\s\-()]*$/.test(phone) || phone.replace(/\D/g, "").length < 9) msg = "נא לכתוב מספר טלפון תקין.";
+    err.textContent = msg; err.hidden = !msg;
+    return msg ? null : { fullName, phone };
+  }
+
+  async function book(ds, t, btn, firstTime) {
     if (state.busy) return;
+    let profile = null;
+    if (firstTime) {
+      profile = readProfileForm();
+      if (!profile) return;
+    }
     state.busy = true;
     btn.disabled = true; btn.textContent = "רושמים...";
     try {
@@ -393,13 +421,16 @@
         await new Promise((r) => setTimeout(r, 500));
         res = { ok: true, booking: { date: ds, time: t } };
       } else {
-        res = await api({ action: "book", idToken: state.user.token, date: ds, time: t });
+        const payload = { action: "book", idToken: state.user.token, date: ds, time: t };
+        if (profile) { payload.fullName = profile.fullName; payload.phone = profile.phone; }
+        res = await api(payload);
       }
       if (res.ok) {
         state.taken.add(ds + " " + t);
         state.mine.push(res.booking);
+        if (profile) state.profile = profile;
         renderAll();
-        modal("המפגש נקבע",
+        modal("המפגש נקבע בהצלחה",
           "<p>" + fmtLongDate(ds) + " בשעה " + t + "</p>" +
           '<p class="muted">שלחנו אישור לאימייל שלכם, והמפגש נוסף ליומן Google עם קישור ל-Google Meet. תזכורת תישלח יום לפני ושוב שעתיים לפני.' +
           (DEMO ? "<br>(מצב הדגמה: לא נשלח אימייל)" : "") + "</p>",
@@ -423,7 +454,8 @@
       taken: "מישהו אחר נרשם למועד הזה ממש עכשיו. בחרו מועד אחר.",
       limit: "כבר נרשמתם למפגש בחודש הזה. אפשר להירשם למפגש אחד בכל חודש.",
       invalid: "המועד הזה כבר לא זמין.",
-      past: "המועד הזה כבר עבר."
+      past: "המועד הזה כבר עבר.",
+      profile: "חסרים שם מלא או מספר טלפון. נסו שוב."
     })[code] || "משהו השתבש. נסו שוב בעוד רגע.";
   }
 
