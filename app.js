@@ -121,6 +121,13 @@
     return (state.slots[dateStr] || []).filter((t) => isFuture(dateStr, t));
   }
 
+  /** כל השעות שמוצגות ביום: מועדים פתוחים, ולבעלים גם כל מפגש שנקבע (גם אם המועד שלו כבר לא ברשימת הפתוחים) */
+  function dayTimes(dateStr) {
+    const set = new Set(freeTimes(dateStr));
+    if (state.isOwner) state.all.forEach((b) => { if (b.date === dateStr && isFuture(b.date, b.time)) set.add(b.time); });
+    return Array.from(set).sort();
+  }
+
   function hasFree(dateStr) {
     return freeTimes(dateStr).some((t) => !state.taken.has(dateStr + " " + t));
   }
@@ -338,8 +345,8 @@
 
       // קוביות בתוך היום: פנוי (ירוק), ולבעלים גם מפגש שנקבע (זהוב, עם שם)
       const chips = [];
-      freeTimes(ds).forEach((t) => {
-        const isTaken = state.taken.has(ds + " " + t);
+      dayTimes(ds).forEach((t) => {
+        const isTaken = state.taken.has(ds + " " + t) || !!(state.isOwner && bookingAt(ds, t));
         if (!isTaken) chips.push({ t, kind: "free" });
         else if (state.isOwner) chips.push({ t, kind: "booked", b: bookingAt(ds, t) });
       });
@@ -497,7 +504,7 @@
     const A = state.admin;
     const same = sameZoneAsIsrael();
     if (same) A.zone = "il";
-    const times = freeTimes(ds);
+    const times = dayTimes(ds);
 
     let html = '<div class="admin">' +
       "<h3>" + fmtLongDate(ds) + "</h3>" +
@@ -510,7 +517,7 @@
     } else {
       html += '<ul class="slot-list">' + times.map((t) => {
         const b = bookingAt(ds, t);
-        const isTaken = state.taken.has(ds + " " + t);
+        const isTaken = state.taken.has(ds + " " + t) || !!b;
         return '<li><span class="t">' + t + '</span><span class="tz">ישראל' +
           (same ? "" : ' · <span class="local-inline">' + localTime(ds, t) + " אצלך</span>") + "</span>" +
           (isTaken
