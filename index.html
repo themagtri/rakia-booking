@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>תוכנית רקיע – הרשמה למפגשים</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="config.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <h1>הרשמה למפגשי אימון אישי</h1>
+      <p class="program">תוכנית רקיע</p>
+      <p class="name">לורן זילברשטין</p>
+      <p class="sub">בחרו יום ושעה פנויים, התחברו עם חשבון Google ואשרו את המפגש.</p>
+    </header>
+
+    <section class="account card" id="account">
+      <div id="signedOut">
+        <span class="account-text">כדי לקבוע מפגש יש להתחבר עם חשבון Google</span>
+        <div id="gsiButton"></div>
+      </div>
+      <div id="signedIn" hidden>
+        <img id="userPic" alt="" referrerpolicy="no-referrer">
+        <div class="who">
+          <div id="userName"></div>
+          <div id="userEmail" class="muted"></div>
+        </div>
+        <button class="link" id="signOut" type="button">התנתקות</button>
+      </div>
+    </section>
+
+    <section class="card owner" id="ownerPanel" hidden></section>
+
+    <section class="card notice" id="myBookings" hidden></section>
+
+    <section class="card cal">
+      <div class="cal-head">
+        <button class="nav" id="prevMonth" type="button" aria-label="החודש הקודם">›</button>
+        <h2 id="monthTitle"></h2>
+        <button class="nav" id="nextMonth" type="button" aria-label="החודש הבא">‹</button>
+      </div>
+      <div class="weekdays" aria-hidden="true">
+        <span>א׳</span><span>ב׳</span><span>ג׳</span><span>ד׳</span><span>ה׳</span><span>ו׳</span><span>ש׳</span>
+      </div>
+      <div class="grid" id="grid" role="grid"></div>
+      <div class="legend">
+        <span><i class="dot"></i> יש מועדים פנויים</span>
+      </div>
+    </section>
+
+    <section class="card slots" id="slots">
+      <p class="muted center">בחרו יום מסומן בלוח כדי לראות את השעות הפנויות.</p>
+    </section>
+
+    <section class="terms">
+      <h3>כמה מילים לפני שנפגשים</h3>
+      <ul>
+        <li>ההרשמה נעשית דרך חשבון Google, כדי שנוכל לשלוח לכם אישור, תזכורות וקישור למפגש.</li>
+        <li>אפשר לקבוע מפגש אחד בכל חודש.</li>
+        <li>אחרי ההרשמה תקבלו אימייל אישור, והמפגש יתווסף ליומן Google שלכם עם קישור ל-Google Meet. נשלח לכם תזכורת יום לפני המפגש ושוב שעתיים לפניו.</li>
+        <li>השם והאימייל שלכם משמשים רק לתיאום המפגשים.</li>
+      </ul>
+      <div class="change-note">
+        <h4>שינוי או ביטול מפגש</h4>
+        <p>אי אפשר לבטל או לשנות מפגש דרך האתר. אם משהו משתנה, כתבו לי <a id="waLink" href="#" target="_blank" rel="noopener">בוואטסאפ</a> כמה שיותר מוקדם, <strong>ולפחות 24 שעות לפני המפגש</strong>. אחרי שאבטל את המפגש, תוכלו לבחור כאן מועד חדש.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h3 id="modalTitle"></h3>
+      <div id="modalBody"></div>
+      <div class="modal-actions" id="modalActions"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
