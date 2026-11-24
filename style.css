@@ -210,6 +210,14 @@ dl.info a { color: var(--accent-dark); }
   font-size: 13px; font-weight: 600; padding: 5px 14px; border-radius: 999px; background: var(--accent); color: #fff; text-decoration: none;
 }
 .owner .ag-meet:hover { background: var(--accent-dark); }
+.ag-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.owner .ag-wa {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600;
+  padding: 4px 12px; border-radius: 999px; text-decoration: none;
+  color: #1f7a4d; background: #e6f4ec; border: 1px solid #bfe3cf;
+}
+.owner .ag-wa:hover { background: #d6eee1; }
+@media (max-width: 480px) { .owner .ag-wa span { display: none; } .owner .ag-wa { padding: 6px 9px; } }
 .agenda-empty { text-align: center; margin: 16px 0 4px; }
 .agenda-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 12px; }
 .syncing { margin: -4px 0 10px; font-size: 13px; color: var(--muted); text-align: center; }

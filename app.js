@@ -6,6 +6,7 @@
   // מצב הדגמה: כשעדיין לא הוגדר שרת, האתר עובד בלי שמירה אמיתית
   const DEMO = !CFG.apiUrl;
   const WEEKDAYS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+  const WA_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>';
 
   const state = {
     duration: 50,
@@ -292,6 +293,34 @@
     return /^5\d{8}$/.test(v) ? "0" + v : v;   // ה-0 שנעלם כש-Sheets שמר את המספר כמספר
   }
 
+  /* ---------- תזכורת בוואטסאפ (נפתחת בוואטסאפ של לורן עם הודעה מוכנה) ---------- */
+
+  function intlPhone(p) {
+    const d = String(p || "").replace(/\D/g, "");
+    if (!d) return "";
+    if (d.startsWith("972")) return d;
+    if (d.startsWith("0")) return "972" + d.slice(1);
+    if (/^5\d{8}$/.test(d)) return "972" + d;
+    return d;   // מספר בינלאומי אחר
+  }
+
+  function relativeDay(ds) {
+    const t = todayStr();
+    if (ds === t) return "היום";
+    if (ds === addDays(t, 1)) return "מחר";
+    return "ב" + fmtLongDate(ds);
+  }
+
+  function waReminderLink(b) {
+    const phone = intlPhone(b.phone);
+    if (!phone) return "";
+    const first = String(b.name || "").trim().split(/\s+/)[0] || "";
+    const msg = "היי " + first + ", תזכורת קטנה למפגש שלנו " + relativeDay(b.date) + " בשעה " + b.time + " (שעון ישראל) 🌿" +
+      (b.meetLink ? "\nקישור למפגש ב-Google Meet:\n" + b.meetLink : "") +
+      "\nנתראה!\nלורן";
+    return "https://wa.me/" + phone + "?text=" + encodeURIComponent(msg);
+  }
+
   /** "המפגשים שלי" ליום אחד, עם חצים למעבר בין ימים (רק לבעלים) */
   function renderOwner() {
     const box = $("ownerPanel");
@@ -323,8 +352,11 @@
           '<span class="ag-time"><b>' + b.time + "</b>" + (same ? "" : "<small>" + localTime(b.date, b.time) + " אצלך</small>") + "</span>" +
           '<span class="ag-who"><strong>' + escapeHtml(b.name) + "</strong>" +
           "<small>" + escapeHtml(b.email) + (phone ? ' · <a href="tel:' + escapeHtml(phone.replace(/[^\d+]/g, "")) + '" dir="ltr">' + escapeHtml(phone) + "</a>" : "") + "</small></span>" +
+          '<span class="ag-actions">' +
+          (waReminderLink(b) ? '<a class="ag-wa" href="' + escapeHtml(waReminderLink(b)) + '" target="_blank" rel="noopener" title="תזכורת בוואטסאפ">' +
+            WA_ICON + "<span>תזכורת</span></a>" : "") +
           (b.meetLink ? '<a class="ag-meet" href="' + escapeHtml(b.meetLink) + '" target="_blank" rel="noopener">Meet</a>' : "") +
-          "</li>";
+          "</span></li>";
       }).join("") + "</ul>";
     }
     const links = [];
@@ -462,6 +494,7 @@
     }
     const actions = [];
     if (b && b.meetLink) actions.push({ label: "כניסה ל-Meet", primary: true, onClick: () => window.open(b.meetLink, "_blank", "noopener") });
+    if (b && waReminderLink(b)) actions.push({ label: "תזכורת בוואטסאפ", onClick: () => window.open(waReminderLink(b), "_blank", "noopener") });
     actions.push({ label: "ביטול המפגש", danger: true, onClick: () => confirmCancel(ds, t, b) });
     actions.push({ label: "סגירה", onClick: closeModal });
     modal(b ? b.name : "מפגש שנקבע", body, actions);

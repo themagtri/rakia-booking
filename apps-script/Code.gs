@@ -17,7 +17,8 @@ const CONFIG = {
   OWNER_NAME: 'לורן זילברשטין',
   DURATION_MINUTES: 50,       // אורך מפגש
   MIN_MINUTES_AHEAD: 60,      // עד כמה דקות לפני מועד עוד אפשר להירשם
-  NOTIFY_OWNER: true          // אימייל אליך על כל הרשמה חדשה
+  NOTIFY_OWNER: true,         // אימייל אליך על כל הרשמה חדשה
+  OWNER_WA_NUDGE: true        // יום לפני כל מפגש: אימייל אליך עם כפתור לשליחת תזכורת בוואטסאפ
 };
 
 const SHEET_NAME = 'Bookings';
@@ -667,6 +668,49 @@ function sendReminder_(b, kind) { send_(b.email, reminderEmail_(withDuration_(b)
 function sendCancellation_(b) { send_(b.email, cancellationEmail_(withDuration_(b))); }
 function sendOwnerNotice_(b) { send_(ownerEmail_(), ownerEmail_html_(withDuration_(b))); }
 
+/* ---------- תזכורת בוואטסאפ (חצי-אוטומטית: נפתחת בוואטסאפ שלך עם הודעה מוכנה) ---------- */
+
+function intlPhone_(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.indexOf('972') === 0) return d;
+  if (d.charAt(0) === '0') return '972' + d.slice(1);
+  if (/^5\d{8}$/.test(d)) return '972' + d;
+  return d;
+}
+
+function waReminderLink_(b, phone) {
+  const intl = intlPhone_(phone);
+  if (!intl) return '';
+  const first = String(b.name || '').trim().split(/\s+/)[0] || '';
+  const msg = 'היי ' + first + ', תזכורת קטנה למפגש שלנו מחר בשעה ' + b.time + ' (שעון ישראל) 🌿' +
+    (b.meetLink ? '\nקישור למפגש ב-Google Meet:\n' + b.meetLink : '') + '\nנתראה!\nלורן';
+  return 'https://wa.me/' + intl + '?text=' + encodeURIComponent(msg);
+}
+
+/** יום לפני מפגש: אימייל קצר אליך עם כפתור שפותח וואטסאפ עם התזכורת מוכנה */
+function sendOwnerWaNudge_(b, phone) {
+  const link = waReminderLink_(b, phone);
+  if (!link) return;
+  withDuration_(b);
+  send_(ownerEmail_(), {
+    subject: 'מחר: מפגש עם ' + b.name + ' ב-' + b.time + ' · תזכורת בוואטסאפ',
+    html: emailLayout_({
+      preheader: 'לחיצה אחת ותזכורת בוואטסאפ יוצאת ל' + b.name + '.',
+      eyebrow: 'מחר',
+      title: 'מפגש עם ' + esc_(b.name),
+      paragraphs: ['תזכורת באימייל כבר נשלחה. אם תרצה/י לשלוח גם תזכורת אישית בוואטסאפ, הכפתור פותח את הוואטסאפ שלך עם הודעה מוכנה:'],
+      details: [
+        ['תאריך', hebDateLong_(b.date)],
+        ['שעה', timeRange_(b.time, b.duration) + ' <span style="font-weight:400;color:' + E_.muted + ';font-size:14px">· שעון ישראל</span>'],
+        ['טלפון', '<span dir="ltr">' + esc_(phone) + '</span>']
+      ],
+      button: { href: link, text: 'שליחת תזכורת בוואטסאפ' },
+      signature: false
+    })
+  });
+}
+
 /* ================= ביטול (רק על ידך) ================= */
 
 /** ביטול מפגש מהאתר (רק לבעלים). המועד נשאר פתוח, והנרשם/ת מקבל/ת אימייל ביטול. */
@@ -716,6 +760,7 @@ function cancelSelected() {
 function reminderJob() {
   const sh = sheet_();
   const now = Date.now();
+  let people = null;   // נטען רק אם צריך
   activeBookings_().forEach(b => {
     const start = slotStart_(b.date, b.time).getTime();
     if (start < now) return;
@@ -737,6 +782,11 @@ function reminderJob() {
     if (!b.reminder24 && left <= 24 * 3600000 && left > 2 * 3600000) {
       sendReminder_(b, '24');
       sh.getRange(b.row, COL.reminder24).setValue(new Date());
+      if (CONFIG.OWNER_WA_NUDGE) {
+        people = people || participants_();
+        const person = people[b.email];
+        if (person && person.phone) { try { sendOwnerWaNudge_(b, person.phone); } catch (err) { console.error(err); } }
+      }
     }
     if (!b.reminder2 && left <= 2 * 3600000) {
       sendReminder_(b, '2');
