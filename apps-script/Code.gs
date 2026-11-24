@@ -16,7 +16,6 @@ const CONFIG = {
   TIMEZONE: 'Asia/Jerusalem',
   MEETING_TITLE: 'מפגש אימון אישי – תוכנית רקיע',
   OWNER_NAME: 'לורן זילברשטין',
-  WHATSAPP: '972500000000',
   MIN_MINUTES_AHEAD: 60,      // עד כמה דקות לפני מועד עוד אפשר להירשם
   NOTIFY_OWNER: true          // אימייל אליך על כל הרשמה חדשה
 };
@@ -99,8 +98,7 @@ function book_(body) {
     // אירוע ביומן שלך + הזמנה ליומן של המשתמש + קישור Google Meet
     const event = Calendar.Events.insert({
       summary: CONFIG.MEETING_TITLE + ' – ' + user.name,
-      description: 'מפגש שנקבע דרך אתר ההרשמה.\nלשינוי או ביטול: וואטסאפ https://wa.me/' + CONFIG.WHATSAPP +
-        ' (לפחות 24 שעות מראש).',
+      description: 'מפגש שנקבע דרך אתר ההרשמה.\nלשינוי או ביטול: לכתוב לי בוואטסאפ, לפחות 24 שעות מראש.',
       start: { dateTime: start.toISOString(), timeZone: CONFIG.TIMEZONE },
       end: { dateTime: end.toISOString(), timeZone: CONFIG.TIMEZONE },
       attendees: [{ email: user.email, displayName: user.name }],
@@ -226,8 +224,7 @@ function emailHtml_(title, lines, meetLink) {
     '</div></div>';
 }
 
-const WA_LINE_ = () => 'לשינוי או ביטול יש לכתוב לי <a href="https://wa.me/' + CONFIG.WHATSAPP +
-  '">בוואטסאפ</a> כמה שיותר מוקדם, ולפחות 24 שעות לפני המפגש.';
+const WA_LINE_ = () => 'לשינוי או ביטול יש לכתוב לי בוואטסאפ כמה שיותר מוקדם, ולפחות 24 שעות לפני המפגש.';
 
 function sendConfirmation_(b) {
   MailApp.sendEmail({

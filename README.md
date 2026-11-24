@@ -44,7 +44,6 @@
    - `CLIENT_ID` – מה שהעתקת בשלב 2
    - `AVAILABILITY_URL` – הכתובת משלב 1 + `availability.json`
    - `SITE_URL` – הכתובת משלב 1
-   - `WHATSAPP` – המספר שלך בפורמט `9725XXXXXXXX`
 6. לשמור, לבחור למעלה את הפונקציה **setup** וללחוץ **Run**. לאשר את כל ההרשאות (יומן, Gmail, גיליון). אם מופיע "Google hasn't verified this app": **Advanced → Go to… (unsafe)**. זה הקוד שלך, אז זה בסדר.
 7. **Deploy → New deployment** → סוג **Web app**:
    - Execute as: **Me**
@@ -55,7 +54,6 @@
 בקובץ `config.js` למלא:
 - `googleClientId` – מה שהעתקת בשלב 2
 - `apiUrl` – הכתובת משלב 3.7
-- `whatsappNumber` – המספר שלך
 
 ולהעלות את השינוי ל-GitHub.
 

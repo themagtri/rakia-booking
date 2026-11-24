@@ -438,7 +438,6 @@
   /* ---------- הפעלה ---------- */
 
   async function init() {
-    $("waLink").href = "https://wa.me/" + (CFG.whatsappNumber || "");
     $("signOut").onclick = signOut;
     $("prevMonth").onclick = () => shiftMonth(-1);
     $("nextMonth").onclick = () => shiftMonth(1);
