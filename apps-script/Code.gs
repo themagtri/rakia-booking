@@ -144,7 +144,7 @@ function book_(body) {
     // אירוע ביומן שלך + הזמנה ליומן של המשתמש + קישור Google Meet
     const event = Calendar.Events.insert({
       summary: CONFIG.MEETING_TITLE + ' – ' + user.name,
-      description: 'מפגש שנקבע דרך אתר ההרשמה.\nלשינוי או ביטול: לכתוב לי בוואטסאפ, לפחות 24 שעות מראש.',
+      description: 'מפגש שנקבע דרך אתר ההרשמה.\nלשינוי מועד או לביטול יש לפנות ללורן בוואטסאפ, לא יאוחר מ-24 שעות לפני מועד המפגש.',
       start: { dateTime: start.toISOString(), timeZone: CONFIG.TIMEZONE },
       end: { dateTime: end.toISOString(), timeZone: CONFIG.TIMEZONE },
       attendees: [
@@ -550,9 +550,9 @@ function meetingDetails_(b) {
 }
 
 const CHANGE_NOTE_ = {
-  title: 'שינוי או ביטול',
-  html: 'אי אפשר לבטל או לשנות מפגש דרך האתר. אם משהו משתנה, יש לכתוב לי בוואטסאפ כמה שיותר מוקדם, ' +
-    '<strong>ולפחות 24 שעות לפני המפגש</strong>. אחרי הביטול אפשר לבחור באתר מועד חדש.'
+  title: 'מדיניות שינויים וביטולים',
+  html: 'לא ניתן לבטל או לשנות מפגש דרך האתר. לשינוי מועד או לביטול יש לפנות ללורן בוואטסאפ, ' +
+    '<strong>לא יאוחר מ-24 שעות לפני מועד המפגש</strong>. לאחר אישור הביטול ניתן לקבוע מועד חדש באתר.'
 };
 
 function meetButton_(b) {
@@ -704,7 +704,7 @@ function buildIcs_(b, method) {
     'SUMMARY:' + icsEscape_(CONFIG.MEETING_TITLE),
     'DESCRIPTION:' + icsEscape_('מפגש אימון אישי עם ' + CONFIG.OWNER_NAME + '.' +
       (b.meetLink ? '\nקישור ל-Google Meet: ' + b.meetLink : '') +
-      '\nלשינוי או ביטול: לכתוב ללורן בוואטסאפ, לפחות 24 שעות מראש.'),
+      '\nלשינוי מועד או לביטול יש לפנות ללורן בוואטסאפ, לא יאוחר מ-24 שעות לפני מועד המפגש.'),
     'LOCATION:' + icsEscape_(b.meetLink || 'Google Meet'),
     'ORGANIZER;CN=' + icsEscape_(CONFIG.OWNER_NAME) + ':mailto:' + owner,
     'ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=' +

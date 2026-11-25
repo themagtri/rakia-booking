@@ -1004,7 +1004,7 @@
     body += '<ul class="confirm-list">' +
       '<li><span class="ic">✉</span><span>אישור יישלח לאימייל<br><bdi class="em">' + escapeHtml(state.user.email) + "</bdi></span></li>" +
       '<li><span class="ic">📅</span><span>המפגש יתווסף ליומן Google שלכם, עם קישור ל-Google Meet</span></li>' +
-      '<li><span class="ic">💬</span><span>לשינוי או ביטול יש לפנות ללורן בוואטסאפ, לפחות 24 שעות מראש</span></li>' +
+      '<li><span class="ic">💬</span><span>לשינוי מועד או לביטול יש לפנות ללורן בוואטסאפ, לא יאוחר מ-24 שעות לפני מועד המפגש</span></li>' +
       "</ul>";
     modal(firstTime ? "הרשמה ראשונה" : "אישור מפגש", body, [
       { label: "אישור ההרשמה", primary: true, onClick: (e) => book(ds, t, e.target, firstTime) },
